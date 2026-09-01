@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Transaction Invoice</title>
+
+    <style>
+        /* ... (keep all existing styles the same) ... */
+        body {
+            background: #f4f6f9;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+        .invoice-container {
+            max-width: 900px;
+            margin: auto;
+            background: #fff;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        h2 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .section {
+            margin-bottom: 20px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 15px;
+        }
+
+        .section:last-child {
+            border-bottom: none;
+        }
+
+        .section-title {
+            font-size: 18px;
+            margin-bottom: 10px;
+            color: #444;
+            font-weight: bold;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px 20px;
+        }
+
+        .grid p {
+            margin: 5px 0;
+        }
+
+        .images {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .images img {
+            width: 150px;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 8px;
+            border: 2px solid #ddd;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .images img:hover {
+            transform: scale(1.05);
+        }
+
+        .items-table, .extra-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        table th, table td {
+            border: 1px solid #ccc;
+            padding: 10px;
+            font-size: 14px;
+            text-align: left;
+        }
+
+        table th {
+            background: #f1f1f1;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 12px;
+        }
+
+        .status-approved {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status-pending {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+        }
+
+        .status-deleted {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .business-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .buttons {
+            margin-top: 30px;
+            text-align: center;
+        }
+
+        button {
+            padding: 12px 25px;
+            margin: 10px;
+            font-size: 16px;
+            border: none;
+            cursor: pointer;
+            border-radius: 6px;
+            color: #fff;
+            transition: opacity 0.2s;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .agree-btn {
+            background: #28a745;
+        }
+
+        .disagree-btn {
+            background: #dc3545;
+        }
+
+        .message {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 18px;
+            font-weight: bold;
+            display: none;
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        .message.success {
+            background: #d4edda;
+            color: #155724;
+            display: block;
+        }
+
+        .message.error {
+            background: #f8d7da;
+            color: #721c24;
+            display: block;
+        }
+
+        .amount-highlight {
+            font-size: 24px;
+            font-weight: bold;
+            color: #28a745;
+        }
+
+        .amount-negative {
+            color: #dc3545;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            font-size: 18px;
+            color: #666;
+        }
+
+        .image-modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.9);
+        }
+
+        .image-modal-content {
+            margin: auto;
+            display: block;
+            max-width: 90%;
+            max-height: 90%;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .image-modal-close {
+            position: absolute;
+            top: 15px;
+            right: 35px;
+            color: #f1f1f1;
+            font-size: 40px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="invoice-container">
+        <h2>Transaction Invoice</h2>
+
+        <div id="invoiceContent">
+            <div class="loading">Loading invoice data...</div>
+        </div>
+
+        <div class="buttons" id="actionButtons">
+            <button class="agree-btn" onclick="updateApproval(true)" id="approveBtn">Approve Transaction</button>
+            <button class="disagree-btn" onclick="updateApproval(false)" id="rejectBtn">Reject Transaction</button>
+        </div>
+
+        <div id="msg" class="message"></div>
+    </div>
+
+    <!-- Image Modal -->
+    <div id="imageModal" class="image-modal" onclick="closeImageModal()">
+        <span class="image-modal-close">&times;</span>
+        <img class="image-modal-content" id="modalImage">
+    </div>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const transactionId = params.get("id");
+
+// We need to get groupId from somewhere - either from URL params or from the transaction data
+// Let's assume it's passed as a URL parameter, but we'll also try to extract it from the transaction
+let groupId = ''; // You might need to pass this in the URL
+
+const API_URL = `https://aquaservices.esotericprojects.tech/9023/api/transactions/${transactionId}`;
+// Base URL for the API (without the transaction ID)
+const BASE_API_URL = `https://aquaservices.esotericprojects.tech/9023/api`;
+
+// Helper function to parse JSON strings
+function safeJsonParse(str, defaultValue = []) {
+    if (!str) return defaultValue;
+    try {
+        if (typeof str === 'string') {
+            // Handle double-encoded JSON strings
+            const parsed = JSON.parse(str);
+            return Array.isArray(parsed) ? parsed : defaultValue;
+        }
+        return Array.isArray(str) ? str : defaultValue;
+    } catch {
+        return defaultValue;
+    }
+}
+
+// Function to extract image URLs from transaction_pic array
+function extractImageUrls(transactionPic) {
+    if (!transactionPic || !Array.isArray(transactionPic)) return [];
+    
+    const urls = [];
+    transactionPic.forEach(item => {
+        try {
+            if (typeof item === 'string') {
+                // Try to parse if it's a JSON string
+                if (item.startsWith('[')) {
+                    const parsed = JSON.parse(item);
+                    if (Array.isArray(parsed)) {
+                        urls.push(...parsed);
+                    } else {
+                        urls.push(item);
+                    }
+                } else {
+                    urls.push(item);
+                }
+            }
+        } catch {
+            // If parsing fails, add the item as is if it looks like a URL
+            if (typeof item === 'string' && item.startsWith('http')) {
+                urls.push(item);
+            }
+        }
+    });
+    return urls;
+}
+
+function openImageModal(src) {
+    document.getElementById('modalImage').src = src;
+    document.getElementById('imageModal').style.display = 'block';
+}
+
+function closeImageModal() {
+    document.getElementById('imageModal').style.display = 'none';
+}
+
+async function loadInvoice() {
+    try {
+        const res = await fetch(API_URL);
+        if (!res.ok) throw new Error('Failed to fetch transaction');
+        
+        const data = await res.json();
+        const t = data.transactions || {};
+        const bill = data.billDetails || {};
+
+        // Check if transaction is deleted
+        const isDeleted = t.is_Deleted;
+        
+        // Hide action buttons if transaction is deleted or approved
+        const actionButtons = document.getElementById('actionButtons');
+        if (isDeleted || t.is_Approved) {
+            actionButtons.style.display = 'none';
+        } else {
+            actionButtons.style.display = 'block';
+        }
+
+        // Parse images
+        const imageUrls = extractImageUrls(t.transaction_pic);
+
+        // Get transaction type display
+        const transactionTypeDisplay = {
+            'you_gave': 'Payment Given',
+            'you_got': 'Payment Received',
+            'you_discount': 'Discount Applied'
+        }[t.transaction_type] || t.transaction_type;
+
+        // Get status badge
+        const getStatusBadge = () => {
+            if (t.is_Deleted) {
+                return '<span class="status-badge status-deleted">Deleted</span>';
+            }
+            if (t.is_Approved) {
+                return '<span class="status-badge status-approved">Approved</span>';
+            }
+            return '<span class="status-badge status-pending">Pending</span>';
+        };
+
+        // Get party details (customer or supplier)
+        const party = t.customer || t.supplier || {};
+        const partyType = t.customer ? 'Customer' : 'Supplier';
+
+        // Format amount with sign
+        const amount = parseFloat(t.amount) || 0;
+        const amountClass = t.transaction_type === 'you_gave' ? 'amount-negative' : '';
+
+        // Business Owner Details
+        const businessOwner = t.businessOwner || {};
+
+        // Render main invoice
+        document.getElementById("invoiceContent").innerHTML = `
+            <!-- Business Info -->
+            <div class="business-info">
+                <div class="grid">
+                    <p><strong>Business:</strong> ${businessOwner.businessName || 'N/A'}</p>
+                    <p><strong>Owner:</strong> ${businessOwner.name || 'N/A'}</p>
+                    <p><strong>Mobile:</strong> ${businessOwner.mobile || 'N/A'}</p>
+                    <p><strong>GST:</strong> ${businessOwner.GST || 'N/A'}</p>
+                </div>
+            </div>
+
+            <!-- Transaction Details -->
+            <div class="section">
+                <div class="section-title">
+                    Transaction Details ${getStatusBadge()}
+                </div>
+                <div class="grid">
+                    <p><strong>ID:</strong> ${t.id || 'N/A'}</p>
+                    <p><strong>Type:</strong> ${transactionTypeDisplay}</p>
+                    <p><strong>Amount:</strong> <span class="${amountClass}">₹${amount.toFixed(2)}</span></p>
+                    <p><strong>Paid Amount:</strong> ₹${parseFloat(t.paidAmount || 0).toFixed(2)}</p>
+                    <p><strong>Remaining:</strong> ₹${parseFloat(t.remainingAmount || 0).toFixed(2)}</p>
+                    <p><strong>Date:</strong> ${t.transaction_date ? new Date(t.transaction_date).toLocaleString() : 'N/A'}</p>
+                    <p><strong>Description:</strong> ${t.description || 'No description'}</p>
+                    <p><strong>Payment Type:</strong> ${t.paymentType || 'N/A'}</p>
+                    <p><strong>Group ID:</strong> ${t.transaction_group_id || 'N/A'}</p>
+                </div>
+            </div>
+
+            <!-- Party Details -->
+            <div class="section">
+                <div class="section-title">${partyType} Details</div>
+                <div class="grid">
+                    <p><strong>Name:</strong> ${party.name || 'N/A'}</p>
+                    <p><strong>Mobile:</strong> ${party.mobile || 'N/A'}</p>
+                    <p><strong>Email:</strong> ${party.email || 'N/A'}</p>
+                    <p><strong>Address:</strong> ${party.address || 'N/A'}</p>
+                    <p><strong>Current Balance:</strong> 
+                        <span class="${parseFloat(party.current_balance || 0) < 0 ? 'amount-negative' : ''}">
+                            ₹${Math.abs(parseFloat(party.current_balance || 0)).toFixed(2)}
+                            ${parseFloat(party.current_balance || 0) < 0 ? ' (Due)' : ' (Advance)'}
+                        </span>
+                    </p>
+                    <p><strong>Status:</strong> ${party.status || 'N/A'}</p>
+                </div>
+            </div>
+
+            <!-- Transaction Images -->
+            <div class="section">
+                <div class="section-title">Transaction Images (${imageUrls.length})</div>
+                <div class="images">
+                    ${imageUrls.length > 0 
+                        ? imageUrls.map(url => `
+                            <img src="${url}" alt="Transaction Image" onclick="openImageModal('${url}')" />
+                        `).join('')
+                        : '<p>No images uploaded for this transaction</p>'}
+                </div>
+            </div>
+
+            ${bill && Object.keys(bill).length > 0 ? `
+                <!-- Bill Details -->
+                <div class="section">
+                    <div class="section-title">Bill Details</div>
+                    <div class="grid">
+                        <p><strong>Bill ID:</strong> ${bill.bill_id || 'N/A'}</p>
+                        <p><strong>Bill Date:</strong> ${bill.bill_date ? new Date(bill.bill_date).toLocaleDateString() : 'N/A'}</p>
+                        <p><strong>Bill Amount:</strong> ₹${parseFloat(bill.amount || 0).toFixed(2)}</p>
+                        <p><strong>Bill File:</strong> ${bill.bill_file ? `<a href="${bill.bill_file}" target="_blank">Download Bill</a>` : 'N/A'}</p>
+                    </div>
+                </div>
+            ` : ''}
+        `;
+
+        // Update message if transaction is deleted
+        if (t.is_Deleted) {
+            const msg = document.getElementById("msg");
+            msg.className = "message error";
+            msg.style.display = "block";
+            msg.innerText = `This transaction was deleted on ${t.delete_date ? new Date(t.delete_date).toLocaleDateString() : 'unknown date'}`;
+        }
+
+    } catch (err) {
+        console.error("Failed to load invoice:", err);
+        document.getElementById("invoiceContent").innerHTML = "<p style='color:red; text-align:center;'>Failed to load invoice data. Please try again.</p>";
+    }
+}
+
+loadInvoice();
+
+async function updateApproval(isApproved) { 
+    const approveBtn = document.getElementById('approveBtn');
+    const rejectBtn = document.getElementById('rejectBtn');
+    
+    // Disable buttons during API call
+    approveBtn.disabled = true;
+    rejectBtn.disabled = true;
+    
+    try {
+        // First, get the current transaction data to extract groupId and transaction_group_id
+        const transactionRes = await fetch(API_URL);
+        if (!transactionRes.ok) {
+            throw new Error('Failed to fetch transaction details');
+        }
+        
+        const transactionData = await transactionRes.json();
+        const transaction = transactionData.transactions || {};
+        
+        // Get groupId and transaction_group_id from the transaction data
+         groupId = transaction.transaction_group_id;
+        
+        if (!groupId) {
+            throw new Error('Missing groupId or transaction_group_id');
+        }
+        
+        // Construct the correct API URL with groupId and transaction_group_id
+        const updateUrl = `${BASE_API_URL}/transactions/${groupId}/transaction_group_id`;
+        
+        // Prepare the payload - only send the fields that need to be updated
+        const payload = { 
+            is_Approved: isApproved,
+            status: isApproved ? 'approved' : 'rejected'
+        };
+        
+        console.log('Updating transaction at:', updateUrl);
+        console.log('With payload:', payload);
+        
+        const res = await fetch(updateUrl, { 
+            method: "PUT", 
+            headers: { "Content-Type": "application/json" }, 
+            body: JSON.stringify(payload) 
+        }); 
+
+        const msg = document.getElementById("msg"); 
+        
+        if (res.ok) { 
+            msg.className = "message success";
+            msg.style.display = "block";
+            msg.innerText = isApproved ? "Transaction Approved Successfully!" : "Transaction Rejected!"; 
+            
+            // Hide action buttons after successful update
+            document.getElementById('actionButtons').style.display = 'none';
+            
+            // Reload invoice to show updated status
+            setTimeout(() => {
+                loadInvoice(); 
+            }, 1500);
+        } else { 
+            const error = await res.json().catch(() => ({ message: 'Failed to update' }));
+            msg.className = "message error";
+            msg.style.display = "block";
+            msg.innerText = error.message || "Failed to update transaction!";
+            console.error('Update failed:', error);
+            
+            // Re-enable buttons
+            approveBtn.disabled = false;
+            rejectBtn.disabled = false;
+        }
+    } catch (error) {
+        const msg = document.getElementById("msg");
+        msg.className = "message error";
+        msg.style.display = "block";
+        msg.innerText = error.message || "Network error! Please try again.";
+        console.error('Error in updateApproval:', error);
+        
+        // Re-enable buttons
+        approveBtn.disabled = false;
+        rejectBtn.disabled = false;
+    }
+}
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+    const modal = document.getElementById('imageModal');
+    if (event.target === modal) {
+        closeImageModal();
+    }
+}
+</script>
+
+</body>
+</html>
