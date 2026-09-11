@@ -2,7 +2,7 @@ const cron = require('node-cron');
 const { Op } = require('sequelize');
 const Subscription = require('../models/Subscription');
 const Transaction = require('../models/Transaction');
-const notificationService = require('../services/notification.service');
+const notificationRoute = require('../routes/notification');
 
 cron.schedule('0 9 * * *', async () => {
   console.log("Running Reminder Cron...");
@@ -22,7 +22,7 @@ cron.schedule('0 9 * * *', async () => {
   });
 
   for (const sub of expiringSubscriptions) {
-    await notificationService.sendSubscriptionReminder(sub.user_id);
+    await notificationRoute.sendSubscriptionReminder(sub.user_id);
   }
 
   // 🔹 2. Due Payment Reminder
@@ -33,7 +33,7 @@ cron.schedule('0 9 * * *', async () => {
   });
 
   for (const txn of dueTransactions) {
-    await notificationService.sendDueReminder(txn.customer_id);
+    await notificationRoute.sendDueReminder(txn.customer_id);
   }
 
   console.log("Reminder Cron Completed");

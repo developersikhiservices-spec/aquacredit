@@ -1,131 +1,216 @@
 const express = require('express');
-const path = require('path');
-const fs = require('fs');
-const { upload, processImage, deleteOldImage } = require('../middleware/upload');
-const { authenticateToken } = require('../middleware/auth');
 
+const {upload,processImage} = require('../middleware/upload');
+
+const {processSingleFile,deleteFile} = require('../services/processUpload');
+
+const {authenticateToken} = require('../middleware/auth');
+const { bucket } = require('../config/storage');
 const router = express.Router();
 
-// Apply authentication to all routes
-router.use(authenticateToken);
+/*
+|--------------------------------------------------------------------------
+| Authentication
+|--------------------------------------------------------------------------
+*/
 
-// Upload customer photo
-router.post('/customer-photo', upload.single('photo'), processImage, async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({
-        error: 'No file uploaded',
-        message: 'Please select a photo to upload'
-      });
-    }
+// router.use(authenticateToken);
 
-    // Return the file path that can be stored in database
-    const photoPath = req.file.filename;
+/*
+|--------------------------------------------------------------------------
+| Upload customer photo
+|--------------------------------------------------------------------------
+|
+| POST /customer-photo
+| Form-data:
+| photo = image
+|
+*/
 
-    res.json({
-      message: 'Photo uploaded successfully',
-      photo_path: photoPath,
-      file_info: {
-        filename: req.file.filename,
-        mimetype: req.file.mimetype,
-        size: req.file.size
+router.post(
+  '/customer-photo',
+  upload.single('photo'),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({
+          error: 'No file uploaded',
+          message: 'Please select a photo to upload'
+        });
       }
-    });
 
-  } catch (error) {
-    // Clean up uploaded file on error
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
+      /*
+      |--------------------------------------------------------------------------
+      | Only allow images for this endpoint
+      |--------------------------------------------------------------------------
+      */
+
+      if (!req.file.mimetype.startsWith('image/')) {
+        return res.status(400).json({
+          error: 'Invalid file type',
+          message: 'Customer photo must be an image'
+        });
+      }
+
+      const uploaded = await processSingleFile(req.file);
+
+      return res.json({
+        message: 'Photo uploaded successfully',
+
+        photo_path: uploaded.path,
+
+        photo_url: uploaded.fullUrl,
+
+        file_info: {
+          filename: uploaded.filename,
+          originalName: uploaded.originalName,
+          mimetype: uploaded.mimeType,
+          size: uploaded.size,
+          path: uploaded.path,
+          url: uploaded.fullUrl
+        }
+      });
+
+    } catch (error) {
+      console.error('Photo upload error:', error);
+
+      return res.status(500).json({
+        error: 'Photo upload failed',
+        message: error.message
+      });
     }
-    
-    console.error('Photo upload error:', error);
-    res.status(500).json({
-      error: 'Photo upload failed',
-      message: error.message
-    });
   }
-});
+);
 
-// Delete photo
-router.delete('/photo/:filename', async (req, res) => {
-  try {
-    const filename = req.params.filename;
-    
-    // Validate filename (security check)
-    if (!filename || filename.includes('..') || filename.includes('/')) {
-      return res.status(400).json({
-        error: 'Invalid filename',
-        message: 'Invalid filename provided'
+/*
+|--------------------------------------------------------------------------
+| Delete photo
+|--------------------------------------------------------------------------
+|
+| DELETE /photo
+|
+| Body:
+|
+| {
+|   "path": "images/abc-123.webp"
+| }
+|
+*/
+
+router.delete(
+  '/photo',
+  async (req, res) => {
+    try {
+      const { path: filePath } = req.body;
+
+      if (!filePath) {
+        return res.status(400).json({
+          error: 'File path required',
+          message: 'Please provide the GCS file path'
+        });
+      }
+
+      /*
+      |--------------------------------------------------------------------------
+      | Only allow our known folders
+      |--------------------------------------------------------------------------
+      */
+
+      if (
+        !filePath.startsWith('images/') &&
+        !filePath.startsWith('documents/')
+      ) {
+        return res.status(400).json({
+          error: 'Invalid file path',
+          message: 'Invalid GCS file path'
+        });
+      }
+
+      const deleted = await deleteFile(filePath);
+
+      if (!deleted) {
+        return res.status(404).json({
+          error: 'File not found',
+          message: 'Photo does not exist in GCS'
+        });
+      }
+
+      return res.json({
+        message: 'Photo deleted successfully'
+      });
+
+    } catch (error) {
+      console.error('Photo delete error:', error);
+
+      return res.status(500).json({
+        error: 'Photo delete failed',
+        message: error.message
       });
     }
-
-    const filePath = path.join(__dirname, '../uploads', filename);
-
-    // Check if file exists
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({
-        error: 'File not found',
-        message: 'Photo file not found'
-      });
-    }
-
-    // Delete the file
-    fs.unlinkSync(filePath);
-
-    res.json({
-      message: 'Photo deleted successfully'
-    });
-
-  } catch (error) {
-    console.error('Photo delete error:', error);
-    res.status(500).json({
-      error: 'Photo delete failed',
-      message: error.message
-    });
   }
-});
+);
 
-// Get photo info
-router.get('/photo-info/:filename', async (req, res) => {
-  try {
-    const filename = req.params.filename;
-    
-    // Validate filename
-    if (!filename || filename.includes('..') || filename.includes('/')) {
-      return res.status(400).json({
-        error: 'Invalid filename',
-        message: 'Invalid filename provided'
+/*
+|--------------------------------------------------------------------------
+| Get photo info
+|--------------------------------------------------------------------------
+*/
+
+router.get(
+  '/photo-info',
+  async (req, res) => {
+    try {
+      const filePath = req.query.path;
+
+      if (!filePath) {
+        return res.status(400).json({
+          error: 'File path required'
+        });
+      }
+
+      if (
+        !filePath.startsWith('images/') &&
+        !filePath.startsWith('documents/')
+      ) {
+        return res.status(400).json({
+          error: 'Invalid file path'
+        });
+      }
+
+
+      const file = bucket.file(filePath);
+
+      const [exists] = await file.exists();
+
+      if (!exists) {
+        return res.status(404).json({
+          error: 'File not found'
+        });
+      }
+
+      const [metadata] = await file.getMetadata();
+
+      return res.json({
+        filename: filePath,
+        size: Number(metadata.size),
+        contentType: metadata.contentType,
+        created: metadata.timeCreated,
+        modified: metadata.updated,
+
+        url:
+          `https://storage.googleapis.com/` +
+          `${bucket.name}/${filePath}`
+      });
+
+    } catch (error) {
+      console.error('Photo info error:', error);
+
+      return res.status(500).json({
+        error: 'Failed to get photo info',
+        message: error.message
       });
     }
-
-    const filePath = path.join(__dirname, '../uploads', filename);
-
-    // Check if file exists
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({
-        error: 'File not found',
-        message: 'Photo file not found'
-      });
-    }
-
-    // Get file stats
-    const stats = fs.statSync(filePath);
-    
-    res.json({
-      filename: filename,
-      size: stats.size,
-      created: stats.birthtime,
-      modified: stats.mtime,
-      url: `/uploads/${filename}`
-    });
-
-  } catch (error) {
-    console.error('Photo info error:', error);
-    res.status(500).json({
-      error: 'Failed to get photo info',
-      message: error.message
-    });
   }
-});
+);
 
 module.exports = router;

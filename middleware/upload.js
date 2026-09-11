@@ -1,151 +1,320 @@
 const multer = require('multer');
-const sharp = require('sharp');
 const path = require('path');
-const fs = require('fs');
+const sharp = require('sharp');
+const { processUploadedFileBuffer } = require('../services/processUpload');
+/*
+|--------------------------------------------------------------------------
+| Allowed file types
+|--------------------------------------------------------------------------
+*/
 
-// Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, '../uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-// Allowed MIME types
-const allowedTypes = [
+const allowedMimeTypes = [
   'image/jpeg',
   'image/jpg',
   'image/png',
   'image/gif',
   'image/webp',
-  'application/pdf' // ✅ Added PDF support
+
+  'application/pdf',
+
+  // Excel support if required
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 ];
 
-// Multer storage config
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
-  }
-});
+const allowedExtensions = [
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.gif',
+  '.webp',
+  '.pdf',
+  '.xls',
+  '.xlsx'
+];
 
-// File filter
+/*
+|--------------------------------------------------------------------------
+| Multer memory storage
+|--------------------------------------------------------------------------
+|
+| Files are kept in memory as Buffer objects.
+|
+| req.file.buffer
+| req.files[].buffer
+|
+| This is required for uploading directly to Google Cloud Storage.
+|
+*/
+
+const storage = multer.memoryStorage();
+
+/*
+|--------------------------------------------------------------------------
+| File Filter
+|--------------------------------------------------------------------------
+|
+| We check both MIME type and file extension.
+|
+| This is especially useful for PDFs where some clients/browsers may
+| send a different MIME type.
+|
+*/
+
 const fileFilter = (req, file, cb) => {
-  if (allowedTypes.includes(file.mimetype)) {
+  const ext = path.extname(file.originalname).toLowerCase();
+
+  const mimeAllowed = allowedMimeTypes.includes(file.mimetype);
+  const extensionAllowed = allowedExtensions.includes(ext);
+
+  console.log('Incoming file:', {
+    originalname: file.originalname,
+    mimetype: file.mimetype,
+    extension: ext
+  });
+
+  if (mimeAllowed || extensionAllowed) {
     cb(null, true);
   } else {
-    cb(new Error('Only images and PDFs are allowed'), false);
+    cb(
+      new Error(
+        `Unsupported file type: ${file.mimetype} (${ext})`
+      ),
+      false
+    );
   }
 };
 
-// Create multer instance
+/*
+|--------------------------------------------------------------------------
+| Multer configuration
+|--------------------------------------------------------------------------
+*/
+
 const upload = multer({
   storage,
+
   limits: {
-    fileSize: parseInt(process.env.MAX_FILE_SIZE) || 5 * 1024 * 1024 // 5MB default
+    fileSize:
+      parseInt(process.env.MAX_FILE_SIZE, 10) ||
+      10 * 1024 * 1024
   },
+
   fileFilter
 });
 
-// Middleware: Process image only if not PDF
-const processImage = async (req, res, next) => {
-  if (!req.file) return next();
+/*
+|--------------------------------------------------------------------------
+| Validate PDF signature
+|--------------------------------------------------------------------------
+|
+| A real PDF normally starts with:
+|
+| %PDF-
+|
+| This gives us an additional safety check.
+|
+*/
 
-  const isImage = req.file.mimetype.startsWith('image/');
-  if (!isImage) return next(); // Skip sharp for PDFs
+const validatePdfBuffer = (buffer) => {
+  if (!Buffer.isBuffer(buffer)) {
+    return false;
+  }
 
+  if (buffer.length < 5) {
+    return false;
+  }
+
+  return buffer.subarray(0, 5).toString() === '%PDF-';
+};
+
+/*
+|--------------------------------------------------------------------------
+| Normalize file type
+|--------------------------------------------------------------------------
+|
+| If a browser sends a PDF with a strange MIME type such as:
+|
+| application/octet-stream
+|
+| but the extension is .pdf, we normalize it to application/pdf.
+|
+*/
+
+const normalizeFileType = (file) => {
+  if (!file) {
+    return;
+  }
+
+  const ext = path.extname(file.originalname).toLowerCase();
+
+  if (ext === '.pdf') {
+    file.mimetype = 'application/pdf';
+  }
+
+  if (ext === '.jpg' || ext === '.jpeg') {
+    file.mimetype = 'image/jpeg';
+  }
+
+  if (ext === '.png') {
+    file.mimetype = 'image/png';
+  }
+
+  if (ext === '.gif') {
+    file.mimetype = 'image/gif';
+  }
+
+  if (ext === '.webp') {
+    file.mimetype = 'image/webp';
+  }
+};
+
+/*
+|--------------------------------------------------------------------------
+| Process single uploaded file
+|--------------------------------------------------------------------------
+*/
+
+const processUploadedFile = async (req, res, next) => {
   try {
-    const inputPath = req.file.path;
-    const outputPath = path.join(uploadsDir, 'processed-' + req.file.filename);
-
-    // Resize & optimize with sharp
-    await sharp(inputPath)
-      .resize(800, 800, {
-        fit: 'inside',
-        withoutEnlargement: true
-      })
-      .jpeg({
-        quality: 85,
-        progressive: true
-      })
-      .toFile(outputPath);
-
-    // Delete original image
-    fs.unlinkSync(inputPath);
-
-    // Update req.file with processed path & name
-    req.file.path = outputPath;
-    req.file.filename = 'processed-' + req.file.filename;
-
-    next();
-  } catch (error) {
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
+    if (!req.file) {
+      return next();
     }
 
-    res.status(500).json({
-      error: 'Image processing failed',
+    normalizeFileType(req.file);
+
+    console.log('Uploaded file:', {
+      name: req.file.originalname,
+      mimeType: req.file.mimetype,
+      size: req.file.size
+    });
+
+    if (req.file.mimetype === 'application/pdf') {
+      const validPdf = validatePdfBuffer(req.file.buffer);
+
+      if (!validPdf) {
+        return res.status(400).json({
+          error: 'Invalid PDF',
+          message: 'The uploaded file is not a valid PDF'
+        });
+      }
+
+      return next();
+    }
+
+    if (!req.file.mimetype.startsWith('image/')) {
+      return next();
+    }
+
+    const processedBuffer = await processUploadedFileBuffer(req.file.buffer, {
+      width: 800,
+      height: 800,
+      fit: 'inside',
+      withoutEnlargement: true,
+      outputFormat: 'jpeg',
+      jpegQuality: 85
+    });
+
+    req.file.buffer = processedBuffer;
+    req.file.size = processedBuffer.length;
+    req.file.mimetype = 'image/jpeg';
+
+    const originalName = path.basename(
+      req.file.originalname,
+      path.extname(req.file.originalname)
+    );
+
+    req.file.originalname = `${originalName}.jpg`;
+
+    return next();
+
+  } catch (error) {
+    console.error('File processing error:', error);
+
+    return res.status(500).json({
+      error: 'File processing failed',
       message: error.message
     });
   }
 };
 
-const multiProcessImage = async (req, res, next) => {
-  if (!req.files || req.files.length === 0) return next();
+/*
+|--------------------------------------------------------------------------
+| Process multiple files
+|--------------------------------------------------------------------------
+*/
 
+const multiProcessImage = async (req, res, next) => {
   try {
-    const processedFiles = [];
+    if (!req.files || req.files.length === 0) {
+      return next();
+    }
 
     for (const file of req.files) {
-      const isImage = file.mimetype.startsWith('image/');
+      normalizeFileType(file);
 
-      const originalPath = file.path;
+      /*
+      |--------------------------------------------------------------------------
+      | PDF
+      |--------------------------------------------------------------------------
+      */
 
-      // Skip non-image files (PDF etc.)
-      if (!isImage) {
-        processedFiles.push(file);
+      if (file.mimetype === 'application/pdf') {
+        const validPdf = validatePdfBuffer(file.buffer);
+
+        if (!validPdf) {
+          return res.status(400).json({
+            error: 'Invalid PDF',
+            message: `${file.originalname} is not a valid PDF`
+          });
+        }
+
         continue;
       }
 
-      const processedPath = path.join(uploadsDir, `processed-${file.filename}`);
+      /*
+      |--------------------------------------------------------------------------
+      | Non-image
+      |--------------------------------------------------------------------------
+      */
 
-      // Process image with Sharp
-      await sharp(originalPath)
+      if (!file.mimetype.startsWith('image/')) {
+        continue;
+      }
+
+      /*
+      |--------------------------------------------------------------------------
+      | Process image
+      |--------------------------------------------------------------------------
+      */
+
+      const processedBuffer = await sharp(file.buffer)
         .resize(800, 800, {
           fit: 'inside',
           withoutEnlargement: true
         })
-        .toFormat('jpeg', { quality: 85 })
-        .toFile(processedPath);
+        .jpeg({
+          quality: 85,
+          progressive: true
+        })
+        .toBuffer();
 
-      // Delete original file
-      if (fs.existsSync(originalPath)) {
-        fs.unlinkSync(originalPath);
-      }
+      file.buffer = processedBuffer;
+      file.size = processedBuffer.length;
+      file.mimetype = 'image/jpeg';
 
-      // Push updated file info
-      processedFiles.push({
-        ...file,
-        filename: `processed-${file.filename}`,
-        path: processedPath
-      });
+      const originalName = path.basename(
+        file.originalname,
+        path.extname(file.originalname)
+      );
+
+      file.originalname = `${originalName}.jpg`;
     }
-
-    // Replace req.files with the processed ones
-    req.files = processedFiles;
 
     next();
+
   } catch (error) {
-    // Cleanup if something goes wrong
-    if (req.files) {
-      req.files.forEach(file => {
-        if (file.path && fs.existsSync(file.path)) {
-          fs.unlinkSync(file.path);
-        }
-      });
-    }
+    console.error('Multiple file processing error:', error);
 
     return res.status(500).json({
       error: 'Image processing failed',
@@ -154,22 +323,28 @@ const multiProcessImage = async (req, res, next) => {
   }
 };
 
-// Delete file (used externally)
-const deleteOldImage = (oldImagePath) => {
-  
-  const fullPath = path.join(__dirname, './uploads', oldImagePath);
-  if (oldImagePath && fs.existsSync(fullPath)) {
-    try {
-      fs.unlinkSync(fullPath);
-    } catch (error) {
-      console.error('Error deleting file:', error);
-    }
-  }
+/*
+|--------------------------------------------------------------------------
+| Delete old image
+|--------------------------------------------------------------------------
+|
+| This is kept only for backward compatibility.
+| Actual GCS deletion should be done through deleteFile()
+| from service/processUpload.js
+|
+*/
+
+const deleteOldImage = async () => {
+  console.warn(
+    'deleteOldImage() is deprecated. Use deleteFile() from processUpload.js'
+  );
 };
 
 module.exports = {
   upload,
-  processImage,
+  processUploadedFile,
   multiProcessImage,
-  deleteOldImage
+  deleteOldImage,
+  validatePdfBuffer,
+  normalizeFileType
 };

@@ -310,8 +310,69 @@ router.delete("/:id", async (req, res) => {
   }
 }
 
+ async function sendSubscriptionReminder(userId) {
+  try {
+    const title ="SubscriptionReminder";
+    const body ="Please renewal your Subscription";
+
+    const notification = await Notification.create({
+      user_id: userId || null,
+      title: title,
+      message: message,
+      type: "warning",
+      is_push: is_push
+    });
+
+    // 1. Get all active FCM tokens for the user
+    const tokens = await UserFcmToken.findOne({
+      where: {
+        user_id: user.id,
+        is_active: true
+      },
+      attributes: ['fcm_token']
+    });
+
+    if (!tokens) {
+      console.log(`⚠️ No active FCM token for user ${user.id}`);
+      return;
+  }
+    // 2. Loop through token chunks and send in batches
+    const message = {
+      notification: { title, body },
+      token: tokens.fcm_token
+    };
+
+    await admin.messaging().send(message);
+
+
+
+  } catch (err) {
+    console.error('❌ Failed to send welcome notification:', err);
+  }
+}
+
+ async function sendDueReminder(userId) {
+  try {
+    const title ="sendDueReminder";
+    const body ="Please renewal your Subscription";
+
+    const notification = await Notification.create({
+      user_id: userId || null,
+      title: title,
+      message: message,
+      type: "warning",
+      is_push: is_push
+    });
+
+  } catch (err) {
+    console.error('❌ Failed to send welcome notification:', err);
+  }
+}
+
 module.exports = {
   router,
+  sendSubscriptionReminder,
+  sendDueReminder,
   sendMultiNotification,
   sendSingleNotification
 };

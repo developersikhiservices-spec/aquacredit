@@ -1,41 +1,78 @@
 const express = require('express');
-const path = require('path');
-const fs = require('fs');
-const { upload, processImage, deleteOldImage, multiProcessImage } = require('../middleware/upload');
+
+const {
+  upload,
+  processUploadedFile,
+  multiProcessImage
+} = require('../middleware/upload');
+
+const {
+  processSingleFile,
+  processMultipleFiles,
+  deleteFile
+} = require('../services/processUpload');
 
 const router = express.Router();
 
-// ✅ Upload route for photo or PDF
-router.post('/', upload.single('file'), processImage, async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({
-        error: 'No file uploaded',
-        message: 'Please upload a file (image or PDF)'
+/*
+|--------------------------------------------------------------------------
+| Upload single file
+|--------------------------------------------------------------------------
+|
+| POST /
+| Form-data:
+| file = image/pdf
+|
+*/
+
+router.post(
+  '/',
+  upload.single('file'),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({
+          error: 'No file uploaded',
+          message: 'Please upload a file (image or PDF)'
+        });
+      }
+
+      const uploaded = await processSingleFile(req.file);
+
+      return res.json({
+        message: 'File uploaded successfully',
+
+        file_info: {
+          filename: uploaded.filename,
+          originalName: uploaded.originalName,
+          mimetype: uploaded.mimeType,
+          size: uploaded.size,
+          path: uploaded.path,
+          url: uploaded.fullUrl
+        }
+      });
+
+    } catch (error) {
+      console.error('Upload error:', error);
+
+      return res.status(500).json({
+        error: 'Upload failed',
+        message: error.message
       });
     }
-
-    res.json({
-      message: 'File uploaded successfully',
-      file_info: {
-        filename: req.file.filename,
-        mimetype: req.file.mimetype,
-        size: req.file.size,
-        path: req.file.path
-      }
-    });
-
-  } catch (error) {
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
-    }
-
-    res.status(500).json({
-      error: 'Upload failed',
-      message: error.message
-    });
   }
-});
+);
+
+/*
+|--------------------------------------------------------------------------
+| Upload multiple files
+|--------------------------------------------------------------------------
+|
+| POST /multi
+| Form-data:
+| files[] = images/pdf
+|
+*/
 
 router.post(
   '/multi',
@@ -46,31 +83,29 @@ router.post(
       if (!req.files || req.files.length === 0) {
         return res.status(400).json({
           error: 'No files uploaded',
-          message: 'Please upload one or more files (image or PDF)'
+          message: 'Please upload one or more files'
         });
       }
 
-      const uploadedFiles = req.files.map(file => ({
-        filename: file.filename,
-        mimetype: file.mimetype,
-        size: file.size,
-        path: file.path
-      }));
+      const uploadedFiles = await processMultipleFiles(
+        req.files
+      );
 
       return res.json({
         message: 'Files uploaded successfully',
-        files: uploadedFiles
+
+        files: uploadedFiles.map(file => ({
+          filename: file.filename,
+          originalName: file.originalName,
+          mimetype: file.mimeType,
+          size: file.size,
+          path: file.path,
+          url: file.fullUrl
+        }))
       });
 
     } catch (error) {
-      // Cleanup uploaded files
-      if (req.files && req.files.length > 0) {
-        req.files.forEach(file => {
-          if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
-          }
-        });
-      }
+      console.error('Multiple upload error:', error);
 
       return res.status(500).json({
         error: 'Upload failed',
@@ -80,24 +115,56 @@ router.post(
   }
 );
 
+/*
+|--------------------------------------------------------------------------
+| Delete uploaded file
+|--------------------------------------------------------------------------
+|
+| DELETE /upload/:filename
+|
+| IMPORTANT:
+| The filename should be the GCS object path.
+|
+| Example:
+| documents/abc-123.pdf
+|
+*/
 
-// ✅ Delete uploaded file
-router.delete('/upload/:filename', (req, res) => {
-  const filename = req.params.filename;
+router.delete(
+  '/upload',
+  async (req, res) => {
+    try {
+      const { path: filePath } = req.body;
 
-  // Validate filename
-  if (!filename || filename.includes('..') || filename.includes('/')) {
-    return res.status(400).json({
-      error: 'Invalid filename',
-      message: 'Filename must be safe and valid'
-    });
+      if (!filePath) {
+        return res.status(400).json({
+          error: 'File path required',
+          message: 'Please provide the GCS file path'
+        });
+      }
+
+      const deleted = await deleteFile(filePath);
+
+      if (!deleted) {
+        return res.status(404).json({
+          error: 'File not found',
+          message: 'File does not exist in GCS'
+        });
+      }
+
+      return res.json({
+        message: 'File deleted successfully'
+      });
+
+    } catch (error) {
+      console.error('Delete error:', error);
+
+      return res.status(500).json({
+        error: 'Delete failed',
+        message: error.message
+      });
+    }
   }
+);
 
-  // Use the shared middleware function
-  deleteOldImage(`upload/${filename}`);
-
-  res.json({
-    message: 'File deleted successfully'
-  });
-});
 module.exports = router;

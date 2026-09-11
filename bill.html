@@ -260,9 +260,9 @@ const transactionId = params.get("id");
 // Let's assume it's passed as a URL parameter, but we'll also try to extract it from the transaction
 let groupId = ''; // You might need to pass this in the URL
 
-const API_URL = `https://aquaservices.esotericprojects.tech/9023/api/transactions/${transactionId}`;
+const API_URL = `https://api.aquacredit.in/9023/api/transactions/${transactionId}`;
 // Base URL for the API (without the transaction ID)
-const BASE_API_URL = `https://aquaservices.esotericprojects.tech/9023/api`;
+const BASE_API_URL = `https://api.aquacredit.in/9023/api`;
 
 // Helper function to parse JSON strings
 function safeJsonParse(str, defaultValue = []) {
