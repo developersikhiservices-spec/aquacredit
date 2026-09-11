@@ -113,7 +113,7 @@ const User = sequelize.define('User', {
   // Add inside the define() fields object
 referral_code: {
   type: DataTypes.STRING(20),
-  unique: true,
+  // unique: true,
   allowNull: true,
 },
 referred_by: {
