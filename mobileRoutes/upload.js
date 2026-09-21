@@ -11,6 +11,7 @@ const {
   processMultipleFiles,
   deleteFile
 } = require('../services/processUpload');
+const { getUploadSignedUrl, getReadSignedUrl } = require('../services/gcsService');
 
 const router = express.Router();
 
@@ -166,5 +167,92 @@ router.delete(
     }
   }
 );
+
+/*
+|--------------------------------------------------------------------------
+| signed uploaded file
+|--------------------------------------------------------------------------
+|
+| SIGNED /upload/:filename
+|
+| IMPORTANT:
+| The filename should be the GCS object path.
+|
+| Example:
+| documents/abc-123.pdf
+*/
+
+router.post('/signed-url',
+  async (req, res) => {
+    try {
+      const { fileName, mimeType, fileType = 'image' } = req.body;
+
+      if (!fileName || !mimeType) {
+        return res
+          .status(400)
+          .json({ error: 'fileName and mimeType are required' });
+      }
+
+      let subFolder = 'images';
+      let maxSizeBytes = 10 * 1024 * 1024; // 10 MB for images
+
+      if (fileType === 'document' || mimeType === 'application/pdf') {
+        subFolder = 'documents';
+        maxSizeBytes = 25 * 1024 * 1024;   // 25 MB for documents
+      }
+
+      const result = await getUploadSignedUrl(
+        fileName,
+        mimeType,
+        subFolder,
+        maxSizeBytes
+      );
+
+      res.status(200).json({
+        success: true,
+        data: {
+          uploadUrl: result.url,
+          filePath: result.filePath,
+          fullUrl: result.fullUrl,
+          requiredHeaders: result.requiredHeaders,
+        },
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  /*
+|--------------------------------------------------------------------------
+| get signed uploaded file
+|--------------------------------------------------------------------------
+|
+| SIGNED /upload/:filename
+|
+| IMPORTANT:
+| The filename should be the GCS object path.
+|
+| Example:
+| documents/abc-123.pdf
+*/
+
+router.get('/signed-read',
+  async (req, res) => {
+    try {
+      const { path: filePath } = req.query;
+      if (!filePath) {
+        return res.status(400).json({ error: 'path query param is required' });
+      }
+
+      const url = await getReadSignedUrl(filePath, 60 * 60 * 1000); // 1 hour
+
+      res.json({
+        success: true,
+        data: { url, expiresIn: 3600 },
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
 
 module.exports = router;

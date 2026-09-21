@@ -327,7 +327,7 @@ const deleteFile = async (filePath) => {
 module.exports = {
   processSingleFile,
   processSingleImage, 
-   processUploadedFileBuffer,
+  processUploadedFileBuffer,
   processSingleDocument,
   processMultipleFiles,
   uploadBufferToBucket,
