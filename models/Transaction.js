@@ -79,7 +79,7 @@ const Transaction = sequelize.define('Transaction', {
     },
     comment: 'Links to the mirror transaction in the opposite user\'s account'
   },
-  
+
   // Optional: Add a group ID to link multiple related transactions
   transaction_group_id: {
     type: DataTypes.STRING,
@@ -289,10 +289,13 @@ Transaction.afterCreate(async (transaction, options) => {
     }
   }
 
-  if (bill_id!==null) {
-    const bill=await Bill.findOne({where:{id:transaction.bill_id}})
+  if (bill_id !== null) {
+    const bill = await Bill.findOne({ where: { id: transaction.bill_id } })
     if (bill) {
-      bill.update({transaction_id:transaction.id})
+      await bill.update(
+        { transaction_id: transaction.id },
+        { transaction: t }
+      );
     }
   }
 
