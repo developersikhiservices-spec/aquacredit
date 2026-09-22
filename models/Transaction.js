@@ -3,6 +3,7 @@ const { sequelize } = require('../config/database');
 const Customer = require('./Customer');
 const User = require('./User');
 const Supplier = require('./Supplier');
+const Bill = require('./Bill');
 
 const Transaction = sequelize.define('Transaction', {
   id: {
@@ -285,6 +286,13 @@ Transaction.afterCreate(async (transaction, options) => {
         current_balance: Number(supplier.current_balance) + amt,
         total_discount_given: Number(supplier.total_discount_given) + amt
       }, { transaction: t });
+    }
+  }
+
+  if (bill_id!==null) {
+    const bill=await Bill.findOne({where:{id:transaction.bill_id}})
+    if (bill) {
+      bill.update({transaction_id:transaction.id})
     }
   }
 
