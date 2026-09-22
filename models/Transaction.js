@@ -289,7 +289,7 @@ Transaction.afterCreate(async (transaction, options) => {
     }
   }
 
-  if (bill_id !== null) {
+  if (transaction.bill_id !== null) {
     const bill = await Bill.findOne({ where: { id: transaction.bill_id } })
     if (bill) {
       await bill.update(
