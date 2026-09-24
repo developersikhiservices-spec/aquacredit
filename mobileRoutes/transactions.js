@@ -42,9 +42,13 @@ const updateTransactionSchema = Joi.object({
   supplier_id: Joi.number().integer().positive().optional().allow(''),
   userId: Joi.number().integer().positive().required(),
   transaction_type: Joi.string().valid('you_gave', 'you_got', 'you_discount').required(),
-  transaction_for: Joi.string().valid('customer', 'supplier').required(),
+  transaction_for: Joi.string().valid('customer', 'supplier').optional().allow(''),
+  created_user: Joi.number().integer().positive().optional().allow(''),
   ownerId: Joi.number().integer().positive().optional().allow(''),
-  amount: Joi.number().positive().precision(2).required(),
+  paymentType: Joi.string().valid('paid', 'credit').required(),
+  amount: Joi.number().positive().precision(2).optional().allow(''),
+  paidAmount: Joi.number().precision(2).optional().allow(''),
+  remainingAmount: Joi.number().precision(2).optional().allow(''),
 });
 
 
