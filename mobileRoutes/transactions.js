@@ -245,7 +245,8 @@ router.post('/customer', async (req, res) => {
           transaction: t,
           lock: t.LOCK.UPDATE
         });
-    
+    console.log("trans::",newTransaction)
+    console.log("transID::",newTransaction.id)
         if (bill) {
           await bill.update(
             { transaction_id: newTransaction.id },
