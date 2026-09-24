@@ -469,7 +469,7 @@ router.put('/customer/:id', async (req, res) => {
       paymentType,
       transaction_date
     } = value;
-console.log("validate value::",value)
+
     const userId = req.body.userId;
     const ownerId = req.body.ownerId;
 
@@ -542,6 +542,7 @@ console.log("validate value::",value)
     // UPDATE MIRROR TRANSACTION IF EXISTS
     let mirrorTx = null;
     if (oldTx.mirror_transaction_id) {
+      console.log("mirror trans:::",updatedData)
       mirrorTx = await updateMirrorTransaction(oldTx, updatedData, t);
     }
     await t.commit();
