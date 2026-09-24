@@ -158,7 +158,7 @@ router.put('/:id', async (req, res) => {
     const allowedFields = [
       'bill_type', 'items', 'bill_file', 'amount',
       'payment_status', 'bill_id', 'ExtraCharges', 'description',
-      'transaction_id', 'bill_date'
+      'transaction_id', 'bill_date','transaction_type'
     ];
 
     const updateData = {};
@@ -240,6 +240,7 @@ router.put('/:id', async (req, res) => {
 
           // UPDATE MIRROR TRANSACTION IF EXISTS
           if (oldTx.mirror_transaction_id) {
+            console.log("mirror trans:::",updateData)
             await updateMirrorTransaction(oldTx, updateData, t);
           }
 

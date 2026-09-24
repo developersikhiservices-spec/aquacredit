@@ -542,7 +542,7 @@ router.put('/customer/:id', async (req, res) => {
     // UPDATE MIRROR TRANSACTION IF EXISTS
     let mirrorTx = null;
     if (oldTx.mirror_transaction_id) {
-      console.log("mirror trans:::",updatedData)
+
       mirrorTx = await updateMirrorTransaction(oldTx, updatedData, t);
     }
     await t.commit();
