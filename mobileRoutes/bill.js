@@ -154,6 +154,7 @@ router.put('/:id', async (req, res) => {
       await t.rollback();
       return res.status(404).json({ error: 'Bill not found' });
     }
+    console.log("rrr::",req.body)
     // Allowed fields
     const allowedFields = [
       'bill_type', 'items', 'bill_file', 'amount',
