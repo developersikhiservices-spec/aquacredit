@@ -49,6 +49,13 @@ const updateTransactionSchema = Joi.object({
   amount: Joi.number().positive().precision(2).optional().allow(''),
   paidAmount: Joi.number().precision(2).optional().allow(''),
   remainingAmount: Joi.number().precision(2).optional().allow(''),
+  description: Joi.string().max(1000).optional().allow(''),
+  transaction_date: Joi.date().optional().allow(''),
+  due_date: Joi.date().optional().optional().allow(''),
+  bill_id: Joi.number().integer().positive().optional().allow(),
+  is_Approved: Joi.boolean().optional().allow(),
+  status: Joi.string().max(100).optional().allow(''),
+
 });
 
 
