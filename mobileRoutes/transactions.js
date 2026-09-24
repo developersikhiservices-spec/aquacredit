@@ -572,10 +572,16 @@ router.put('/supplier/:id', async (req, res) => {
     // Validate input
     const { error, value } = updateTransactionSchema.validate(req.body);
     if (error) {
-      console.log("roll back::",)
+      console.log("Joi validation error:", error.details);
+      console.log("Request body:", req.body);
+    
       await t.rollback();
-      return res.status(400).json({ error: "Validation error", message: error.details[0].message });
-    }
+    
+      return res.status(400).json({
+        error: "Validation error",
+        message: error.details[0].message,
+        details: error.details
+      });    }
     const {
       amount,
       transaction_type,
