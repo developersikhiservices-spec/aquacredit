@@ -283,18 +283,18 @@ Transaction.afterCreate(async (transaction, options) => {
     bill_id_type: typeof transaction.bill_id
   });
 
-  if (transaction.bill_id !== null && transaction.bill_id !== undefined) {
-    const bill = await Bill.findByPk(transaction.bill_id, {
-      transaction: t,
-      lock: t.LOCK.UPDATE
-    });
+  // if (transaction.bill_id !== null && transaction.bill_id !== undefined) {
+  //   const bill = await Bill.findByPk(transaction.bill_id, {
+  //     transaction: t,
+  //     lock: t.LOCK.UPDATE
+  //   });
 
-    if (bill) {
-      await bill.update(
-        { transaction_id: transaction.id },
-        { transaction: t }
-      );
-    }
-  }
+  //   if (bill) {
+  //     await bill.update(
+  //       { transaction_id: transaction.id },
+  //       { transaction: t }
+  //     );
+  //   }
+  // }
 });
 module.exports = Transaction;

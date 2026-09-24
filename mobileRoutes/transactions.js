@@ -239,6 +239,21 @@ router.post('/customer', async (req, res) => {
           remainingPayment = 0;
         }
       }
+
+      if (newTransaction.bill_id !== null && newTransaction.bill_id !== undefined) {
+        const bill = await Bill.findByPk(newTransaction.bill_id, {
+          transaction: t,
+          lock: t.LOCK.UPDATE
+        });
+    
+        if (bill) {
+          await bill.update(
+            { transaction_id: newTransaction.id },
+            { transaction: t }
+          );
+        }
+      }
+    
     }
 
     // -------------------- MIRROR TRANSACTION --------------------
@@ -497,6 +512,10 @@ router.put('/customer/:id', async (req, res) => {
 
     if (!oldTx) {
       await t.rollback();
+      console.log("❌ Transaction not found");
+  console.log("transactionId:", transactionId);
+  console.log("Expected transaction_for: customer");
+
       return res.status(404).json({
         message: "Transaction not found"
       });
