@@ -195,7 +195,7 @@ router.post('/customer', async (req, res) => {
       status
     }, { transaction: t });
 
-    if (transaction_type === "you_got") {
+    if (transaction_type === "you_got" && amt > 0) {
       const unpaidTransactions = await Transaction.findAll({
         where: {
           customer_id,
@@ -241,13 +241,12 @@ router.post('/customer', async (req, res) => {
       }
 
     }
-    console.log("trans::", newTransaction)
     if (newTransaction.bill_id !== null && newTransaction.bill_id !== undefined) {
       const bill = await Bill.findByPk(newTransaction.bill_id, {
         transaction: t,
         lock: t.LOCK.UPDATE
       });
-      console.log("transID::", newTransaction.id)
+
       if (bill) {
         await bill.update(
           { transaction_id: newTransaction.id },
@@ -441,6 +440,19 @@ router.post('/supplier', async (req, res) => {
 
           remainingPayment = 0;
         }
+      }
+    }
+    if (newTransaction.bill_id !== null && newTransaction.bill_id !== undefined) {
+      const bill = await Bill.findByPk(newTransaction.bill_id, {
+        transaction: t,
+        lock: t.LOCK.UPDATE
+      });
+
+      if (bill) {
+        await bill.update(
+          { transaction_id: newTransaction.id },
+          { transaction: t }
+        );
       }
     }
 
