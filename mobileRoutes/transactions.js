@@ -454,7 +454,7 @@ router.put('/customer/:id', async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const transactionId = req.params.id;
-
+console.log("ID::",transactionId)
     // Validate input
     const { error, value } = updateTransactionSchema.validate(req.body);
     if (error) {
