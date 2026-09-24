@@ -239,21 +239,21 @@ router.post('/customer', async (req, res) => {
           remainingPayment = 0;
         }
       }
-      console.log("trans::",newTransaction)
-      if (newTransaction.bill_id !== null && newTransaction.bill_id !== undefined) {
-        const bill = await Bill.findByPk(newTransaction.bill_id, {
-          transaction: t,
-          lock: t.LOCK.UPDATE
-        });
-    console.log("transID::",newTransaction.id)
-        if (bill) {
-          await bill.update(
-            { transaction_id: newTransaction.id },
-            { transaction: t }
-          );
-        }
+
+    }
+    console.log("trans::", newTransaction)
+    if (newTransaction.bill_id !== null && newTransaction.bill_id !== undefined) {
+      const bill = await Bill.findByPk(newTransaction.bill_id, {
+        transaction: t,
+        lock: t.LOCK.UPDATE
+      });
+      console.log("transID::", newTransaction.id)
+      if (bill) {
+        await bill.update(
+          { transaction_id: newTransaction.id },
+          { transaction: t }
+        );
       }
-    
     }
 
     // -------------------- MIRROR TRANSACTION --------------------
@@ -484,7 +484,7 @@ router.put('/customer/:id', async (req, res) => {
     // Validate input
     const { error, value } = updateTransactionSchema.validate(req.body);
     if (error) {
-      console.log("validation details::",error.details)
+      console.log("validation details::", error.details)
       await t.rollback();
       return res.status(400).json({ error: "Validation error", message: error.details[0].message });
     }
@@ -513,14 +513,14 @@ router.put('/customer/:id', async (req, res) => {
     if (!oldTx) {
       await t.rollback();
       console.log("❌ Transaction not found");
-  console.log("transactionId:", transactionId);
-  console.log("Expected transaction_for: customer");
+      console.log("transactionId:", transactionId);
+      console.log("Expected transaction_for: customer");
 
       return res.status(404).json({
         message: "Transaction not found"
       });
     }
-        // Fetch user with lock
+    // Fetch user with lock
     const user = await User.findOne({
       where: { id: userId },
       transaction: t,
@@ -544,7 +544,7 @@ router.put('/customer/:id', async (req, res) => {
     const updatedData = {
       amount,
       transaction_type,
-      paidAmount:amount,
+      paidAmount: amount,
       description: description !== undefined ? description : oldTx.description,
       due_date: due_date !== undefined ? due_date : oldTx.due_date,
       paymentType: paymentType !== undefined ? paymentType : oldTx.paymentType,
