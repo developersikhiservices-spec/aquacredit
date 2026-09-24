@@ -43,7 +43,7 @@ const updateTransactionSchema = Joi.object({
   userId: Joi.number().integer().positive().required(),
   transaction_type: Joi.string().valid('you_gave', 'you_got', 'you_discount').required(),
   transaction_for: Joi.string().valid('customer', 'supplier').required(),
-  // due_date: Joi.date().optional().allow(),
+  ownerId: Joi.number().integer().positive().optional().allow(''),
   amount: Joi.number().positive().precision(2).required(),
 });
 
@@ -171,7 +171,7 @@ router.post('/customer', async (req, res) => {
       customer_id,
       transaction_type,
       transaction_for,
-      amount:amt,
+      amount: amt,
       paidAmount,
       remainingAmount,
       transaction_pic,
@@ -208,12 +208,12 @@ router.post('/customer', async (req, res) => {
         if (remainingPayment <= 0) break;
 
         const trxRemaining = Number(trx.remainingAmount);   // ✅ always numeric
-        const trxPaid      = Number(trx.paidAmount);
+        const trxPaid = Number(trx.paidAmount);
 
         if (remainingPayment >= trxRemaining) {
           // FULLY PAY THIS TRANSACTION
           await trx.update({
-            paidAmount:      trxPaid + trxRemaining,
+            paidAmount: trxPaid + trxRemaining,
             remainingAmount: 0
           }, { transaction: t });
 
@@ -221,7 +221,7 @@ router.post('/customer', async (req, res) => {
         } else {
           // PARTIALLY PAY THIS TRANSACTION
           await trx.update({
-            paidAmount:      trxPaid + remainingPayment,
+            paidAmount: trxPaid + remainingPayment,
             remainingAmount: trxRemaining - remainingPayment
           }, { transaction: t });
 
@@ -230,7 +230,7 @@ router.post('/customer', async (req, res) => {
       }
     }
 
-     // -------------------- MIRROR TRANSACTION --------------------
+    // -------------------- MIRROR TRANSACTION --------------------
     // NOTE: createMirrorTransaction MUST accept & forward `t`, otherwise the
     // afterCreate hook on Transaction will throw "must run inside a DB transaction".
     await createMirrorTransaction(newTransaction, t);
@@ -282,7 +282,7 @@ router.post('/supplier', async (req, res) => {
       transaction_type,
       transaction_for,
       transaction_pic,
-      amount, 
+      amount,
       created_user,
       paymentType,
       due_date,
@@ -356,7 +356,7 @@ router.post('/supplier', async (req, res) => {
       remainingAmount,
       paidAmount,
       bill_id,
-      amount: amt, 
+      amount: amt,
       created_user,
       paymentType,
       due_date,
@@ -395,12 +395,12 @@ router.post('/supplier', async (req, res) => {
         if (remainingPayment <= 0) break;
 
         const trxRemaining = Number(trx.remainingAmount);   // ✅ always numeric
-        const trxPaid      = Number(trx.paidAmount);
+        const trxPaid = Number(trx.paidAmount);
 
         if (remainingPayment >= trxRemaining) {
           // FULLY PAY THIS TRANSACTION
           await trx.update({
-            paidAmount:      trxPaid + trxRemaining,
+            paidAmount: trxPaid + trxRemaining,
             remainingAmount: 0
           }, { transaction: t });
 
@@ -409,7 +409,7 @@ router.post('/supplier', async (req, res) => {
         } else {
           // PARTIALLY PAY THIS TRANSACTION
           await trx.update({
-            paidAmount:      trxPaid + remainingPayment,
+            paidAmount: trxPaid + remainingPayment,
             remainingAmount: trxRemaining - remainingPayment
           }, { transaction: t });
 
@@ -418,7 +418,7 @@ router.post('/supplier', async (req, res) => {
       }
     }
 
-     // -------------------- MIRROR TRANSACTION --------------------
+    // -------------------- MIRROR TRANSACTION --------------------
     // NOTE: createMirrorTransaction MUST accept & forward `t`, otherwise the
     // afterCreate hook on Transaction will throw "must run inside a DB transaction".
     await createMirrorTransaction(newTransaction, t);
@@ -454,7 +454,7 @@ router.put('/customer/:id', async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const transactionId = req.params.id;
-console.log("ID::",transactionId)
+    console.log("ID::", transactionId)
     // Validate input
     const { error, value } = updateTransactionSchema.validate(req.body);
     if (error) {
@@ -574,14 +574,15 @@ router.put('/supplier/:id', async (req, res) => {
     if (error) {
       console.log("Joi validation error:", error.details);
       console.log("Request body:", req.body);
-    
+
       await t.rollback();
-    
+
       return res.status(400).json({
         error: "Validation error",
         message: error.details[0].message,
         details: error.details
-      });    }
+      });
+    }
     const {
       amount,
       transaction_type,
@@ -676,7 +677,7 @@ router.put('/supplier/:id', async (req, res) => {
     const updatedTx = await Transaction.findByPk(oldTx.id, {
       include: [{ model: Supplier, as: "supplier", attributes: ["name", "mobile"] }]
     });
-    console.log("updatedData::",updatedTx);
+    console.log("updatedData::", updatedTx);
     return res.status(200).json({
       message: "supplier transaction updated successfully",
       transaction: updatedTx
