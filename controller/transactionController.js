@@ -251,38 +251,37 @@ async function createMirrorTransaction(originalTransaction, t) {
 // Helper function to update mirror transaction using direct relation
 async function updateMirrorTransaction(oldTransaction, updatedData, t) {
   try {
-    // Check if transaction has a mirror
     if (!oldTransaction.mirror_transaction_id) {
       console.log("No mirror transaction linked");
       return null;
     }
 
-    // Find the mirror transaction
     const mirrorTransaction = await Transaction.findOne({
-      where: { id: oldTransaction.mirror_transaction_id },
+      where: {
+        id: oldTransaction.mirror_transaction_id
+      },
       transaction: t,
       lock: t.LOCK.UPDATE
     });
 
     if (!mirrorTransaction) {
-      console.log("Mirror transaction not found");
-      return null;
+      throw new Error("Mirror transaction not found");
     }
 
-    // Find the opposite user (owner of mirror transaction)
     const oppositeUser = await User.findOne({
-      where: { id: mirrorTransaction.created_user },
+      where: {
+        id: mirrorTransaction.created_user
+      },
       transaction: t,
       lock: t.LOCK.UPDATE
     });
 
     if (!oppositeUser) {
-      console.log("Opposite user not found");
-      return null;
+      throw new Error("Opposite user not found");
     }
 
-    // Find the opposite entity (customer/supplier)
     let oppositeEntity = null;
+
     if (mirrorTransaction.transaction_for === "customer") {
       oppositeEntity = await Customer.findOne({
         where: {
@@ -292,7 +291,7 @@ async function updateMirrorTransaction(oldTransaction, updatedData, t) {
         transaction: t,
         lock: t.LOCK.UPDATE
       });
-    } else {
+    } else if (mirrorTransaction.transaction_for === "supplier") {
       oppositeEntity = await Supplier.findOne({
         where: {
           id: mirrorTransaction.supplier_id,
@@ -304,17 +303,45 @@ async function updateMirrorTransaction(oldTransaction, updatedData, t) {
     }
 
     if (!oppositeEntity) {
-      console.log("Opposite entity not found");
-      return null;
+      throw new Error("Opposite entity not found");
     }
 
-    // Calculate opposite transaction type
-    const oppositeType =
-      updatedData.transaction_type === "you_gave" ? "you_got" :
-        updatedData.transaction_type === "you_got" ? "you_gave" :
-          "you_discount";
+    // ============================================
+    // DETERMINE MIRROR TYPE
+    // ============================================
 
-    // Reverse old mirror transaction effects
+    const oppositeTypeMap = {
+      you_gave: "you_got",
+      you_got: "you_gave",
+      you_discount: "you_discount"
+    };
+
+    const oppositeType =
+      oppositeTypeMap[updatedData.transaction_type];
+
+    if (!oppositeType) {
+      throw new Error(
+        `Invalid transaction type: ${updatedData.transaction_type}`
+      );
+    }
+
+    console.log("MIRROR UPDATE:", {
+      mainTransactionId: oldTransaction.id,
+      mainOldType: oldTransaction.transaction_type,
+      mainNewType: updatedData.transaction_type,
+
+      mirrorTransactionId: mirrorTransaction.id,
+      mirrorOldType: mirrorTransaction.transaction_type,
+      mirrorNewType: oppositeType,
+
+      oldAmount: mirrorTransaction.amount,
+      newAmount: updatedData.amount
+    });
+
+    // ============================================
+    // REVERSE OLD MIRROR EFFECT
+    // ============================================
+
     await applyBalanceChanges({
       type: mirrorTransaction.transaction_type,
       amount: mirrorTransaction.amount,
@@ -323,28 +350,72 @@ async function updateMirrorTransaction(oldTransaction, updatedData, t) {
       reverse: true
     });
 
-    // Apply new mirror transaction effects
+    // ============================================
+    // APPLY NEW MIRROR EFFECT
+    // ============================================
+
     await applyBalanceChanges({
       type: oppositeType,
       amount: updatedData.amount,
       customerOrSupplier: oppositeEntity,
-      user: oppositeUser
+      user: oppositeUser,
+      reverse: false
     });
 
-    // Save opposite user and entity
-    await oppositeEntity.save({ transaction: t });
-    await oppositeUser.save({ transaction: t });
+    // ============================================
+    // SAVE BALANCES
+    // ============================================
 
-    // Update mirror transaction
+    await oppositeEntity.save({
+      transaction: t
+    });
+
+    await oppositeUser.save({
+      transaction: t
+    });
+
+    // ============================================
+    // UPDATE MIRROR TRANSACTION
+    // ============================================
+
     await mirrorTransaction.update({
       amount: updatedData.amount,
+
       transaction_type: oppositeType,
-      paidAmount:updatedData.amount,
-      description: updatedData.description || mirrorTransaction.description,
-      due_date: updatedData.due_date || mirrorTransaction.due_date,
-      paymentType: updatedData.paymentType || mirrorTransaction.paymentType,
-      transaction_date: updatedData.transaction_date || mirrorTransaction.transaction_date
-    }, { transaction: t });
+
+      paidAmount:
+        updatedData.paymentType === "paid"
+          ? updatedData.amount
+          : 0,
+
+      remainingAmount:
+        updatedData.paymentType === "credit"
+          ? updatedData.amount
+          : 0,
+
+      description:
+        updatedData.description !== undefined
+          ? updatedData.description
+          : mirrorTransaction.description,
+
+      due_date:
+        updatedData.due_date !== undefined
+          ? updatedData.due_date
+          : mirrorTransaction.due_date,
+
+      paymentType:
+        updatedData.paymentType !== undefined
+          ? updatedData.paymentType
+          : mirrorTransaction.paymentType,
+
+      transaction_date:
+        updatedData.transaction_date !== undefined
+          ? updatedData.transaction_date
+          : mirrorTransaction.transaction_date
+
+    }, {
+      transaction: t
+    });
 
     return mirrorTransaction;
 
