@@ -255,7 +255,7 @@ async function updateMirrorTransaction(oldTransaction, updatedData, t) {
       console.log("No mirror transaction linked");
       return null;
     }
-
+console.log("updatedData::",updatedData)
     const mirrorTransaction = await Transaction.findOne({
       where: {
         id: oldTransaction.mirror_transaction_id

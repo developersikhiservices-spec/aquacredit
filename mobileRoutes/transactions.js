@@ -469,7 +469,7 @@ router.put('/customer/:id', async (req, res) => {
       paymentType,
       transaction_date
     } = value;
-
+console.log("validate value::",value)
     const userId = req.body.userId;
     const ownerId = req.body.ownerId;
 
