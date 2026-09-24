@@ -458,6 +458,7 @@ router.put('/customer/:id', async (req, res) => {
     // Validate input
     const { error, value } = updateTransactionSchema.validate(req.body);
     if (error) {
+      console.log("validation details::",error.details)
       await t.rollback();
       return res.status(400).json({ error: "Validation error", message: error.details[0].message });
     }
