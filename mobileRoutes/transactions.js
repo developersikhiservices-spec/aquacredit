@@ -239,13 +239,12 @@ router.post('/customer', async (req, res) => {
           remainingPayment = 0;
         }
       }
-
+      console.log("trans::",newTransaction)
       if (newTransaction.bill_id !== null && newTransaction.bill_id !== undefined) {
         const bill = await Bill.findByPk(newTransaction.bill_id, {
           transaction: t,
           lock: t.LOCK.UPDATE
         });
-    console.log("trans::",newTransaction)
     console.log("transID::",newTransaction.id)
         if (bill) {
           await bill.update(
