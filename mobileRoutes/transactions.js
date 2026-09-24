@@ -573,8 +573,6 @@ router.put('/supplier/:id', async (req, res) => {
     const { error, value } = updateTransactionSchema.validate(req.body);
     if (error) {
       console.log("Joi validation error:", error.details);
-      console.log("Request body:", req.body);
-
       await t.rollback();
 
       return res.status(400).json({
@@ -642,7 +640,6 @@ router.put('/supplier/:id', async (req, res) => {
       paymentType: paymentType !== undefined ? paymentType : oldTx.paymentType,
       transaction_date: transaction_date || oldTx.transaction_date
     };
-    console.log("updatedData::");
 
     // Reverse OLD transaction changes
     applyBalanceChanges({
@@ -677,7 +674,7 @@ router.put('/supplier/:id', async (req, res) => {
     const updatedTx = await Transaction.findByPk(oldTx.id, {
       include: [{ model: Supplier, as: "supplier", attributes: ["name", "mobile"] }]
     });
-    console.log("updatedData::", updatedTx);
+
     return res.status(200).json({
       message: "supplier transaction updated successfully",
       transaction: updatedTx
