@@ -339,7 +339,7 @@ async function updateMirrorTransaction(oldTransaction, updatedData, t) {
     await mirrorTransaction.update({
       amount: updatedData.amount,
       transaction_type: oppositeType,
-      // Also update other fields if needed
+      paidAmount:updatedData.amount,
       description: updatedData.description || mirrorTransaction.description,
       due_date: updatedData.due_date || mirrorTransaction.due_date,
       paymentType: updatedData.paymentType || mirrorTransaction.paymentType,

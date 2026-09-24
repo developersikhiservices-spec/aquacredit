@@ -508,6 +508,7 @@ router.put('/customer/:id', async (req, res) => {
     const updatedData = {
       amount,
       transaction_type,
+      paidAmount:amount,
       description: description !== undefined ? description : oldTx.description,
       due_date: due_date !== undefined ? due_date : oldTx.due_date,
       paymentType: paymentType !== undefined ? paymentType : oldTx.paymentType,
