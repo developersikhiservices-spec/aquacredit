@@ -41,7 +41,7 @@ const updateTransactionSchema = Joi.object({
   customer_id: Joi.number().integer().positive().optional().allow(''),
   supplier_id: Joi.number().integer().positive().optional().allow(''),
   userId: Joi.number().integer().positive().required(),
-  transaction_type: Joi.string().valid('you_gave', 'you_got').required(),
+  transaction_type: Joi.string().valid('you_gave', 'you_got', 'you_discount').required(),
   transaction_for: Joi.string().valid('customer', 'supplier').required(),
   // due_date: Joi.date().optional().allow(),
   amount: Joi.number().positive().precision(2).required(),
@@ -52,16 +52,17 @@ const updateTransactionSchema = Joi.object({
 async function applyBalanceChanges({ type, amount, customerOrSupplier, user, reverse = false }) {
   const amt = Number(amount);
   const factor = reverse ? -1 : 1;
-
+  const isCustOrSupp = !!customerOrSupplier;
   if (type === "you_gave") {
     // you_gave: you give credit to customer/supplier
     user.current_balance = Number(user.current_balance) - (amt * factor);
     user.total_credit_given = Number(user.total_credit_given) + (amt * factor);
     if (!reverse) user.credit_given_count += 1;
     else user.credit_given_count -= 1;
-
-    customerOrSupplier.current_balance = Number(customerOrSupplier.current_balance) - (amt * factor);
-    customerOrSupplier.total_credit_given = Number(customerOrSupplier.total_credit_given) + (amt * factor);
+    if (isCustOrSupp) {
+      customerOrSupplier.current_balance = Number(customerOrSupplier.current_balance) - (amt * factor);
+      customerOrSupplier.total_credit_given = Number(customerOrSupplier.total_credit_given) + (amt * factor);
+    }
 
   } else if (type === "you_got") {
     // you_got: you receive payment from customer/supplier
@@ -69,17 +70,18 @@ async function applyBalanceChanges({ type, amount, customerOrSupplier, user, rev
     user.total_payment_got = Number(user.total_payment_got) + (amt * factor);
     if (!reverse) user.payment_got_count += 1;
     else user.payment_got_count -= 1;
-
-    customerOrSupplier.current_balance = Number(customerOrSupplier.current_balance) + (amt * factor);
-    customerOrSupplier.total_payment_got = Number(customerOrSupplier.total_payment_got) + (amt * factor);
-
+    if (isCustOrSupp) {
+      customerOrSupplier.current_balance = Number(customerOrSupplier.current_balance) + (amt * factor);
+      customerOrSupplier.total_payment_got = Number(customerOrSupplier.total_payment_got) + (amt * factor);
+    }
   } else if (type === "you_discount") {
     // you_discount: you give discount
     user.current_balance = Number(user.current_balance) + (amt * factor);
     user.total_discount_given = Number(user.total_discount_given) + (amt * factor);
-
-    customerOrSupplier.current_balance = Number(customerOrSupplier.current_balance) + (amt * factor);
-    customerOrSupplier.total_discount_given = Number(customerOrSupplier.total_discount_given) + (amt * factor);
+    if (isCustOrSupp) {
+      customerOrSupplier.current_balance = Number(customerOrSupplier.current_balance) + (amt * factor);
+      customerOrSupplier.total_discount_got = Number(customerOrSupplier.total_discount_got) + (amt * factor);
+    }
   }
 }
 
@@ -90,12 +92,12 @@ router.post('/customer', async (req, res) => {
     // -------------------- VALIDATE INPUT --------------------
     const { error, value } = transactionSchema.validate(req.body);
     if (error) {
+      await t.rollback();
       return res.status(400).json({
         error: "Validation error",
         message: error.details[0].message
       });
     }
-
     const {
       customer_id,
       transaction_type,
@@ -103,10 +105,8 @@ router.post('/customer', async (req, res) => {
       bill_id,
       transaction_for,
       transaction_pic,
-      remainingAmount,
-      paidAmount, 
       created_user,
-      amount, 
+      amount,
       paymentType,
       due_date,
       description,
@@ -115,6 +115,26 @@ router.post('/customer', async (req, res) => {
       status
     } = value;
     const userId = req.body.userId;
+
+    // -------------------- SERVER-SIDE DERIVE paidAmount / remainingAmount --------------------
+    // Never trust the client for these — they MUST stay consistent with paymentType.
+    const amt = Number(amount);
+    let paidAmount = 0;
+    let remainingAmount = 0;
+
+    if (paymentType === 'paid') {
+      paidAmount = amt;
+      remainingAmount = 0;
+    } else if (paymentType === 'credit') {
+      paidAmount = 0;
+      remainingAmount = amt;
+    } else {
+      await t.rollback();
+      return res.status(400).json({
+        error: "Validation error",
+        message: "paymentType must be either 'paid' or 'credit'"
+      });
+    }
     // -------------------- VERIFY USER --------------------
     const user = await User.findOne({
       where: { id: userId },
@@ -135,7 +155,7 @@ router.post('/customer', async (req, res) => {
       transaction: t,
       lock: t.LOCK.UPDATE
     });
-    console.log("customer::",customer)
+
     if (!customer) {
       await t.rollback();
       return res.status(404).json({
@@ -147,60 +167,62 @@ router.post('/customer', async (req, res) => {
     // -------------------- CREATE TRANSACTION --------------------
     const newTransaction = await Transaction.create({
       business_owner_id: ownerId,
-      created_user,
+      created_user: created_user || userId,
       customer_id,
       transaction_type,
       transaction_for,
-      amount,
-      remainingAmount,
+      amount:amt,
       paidAmount,
+      remainingAmount,
       transaction_pic,
-      bill_id, 
-      created_user,
-      due_date, 
+      bill_id,
+      due_date,
       paymentType,
       description,
       is_Approved,
       transaction_date,
       status
     }, { transaction: t });
+
     if (transaction_type === "you_got") {
-
-
       const unpaidTransactions = await Transaction.findAll({
         where: {
           customer_id,
           business_owner_id: ownerId,
+          paymentType: 'credit',
+          transaction_type: 'you_gave',        // only credit invoices can be paid down
           remainingAmount: {
             [Op.gt]: 0
-          }
+          },
+          is_Deleted: false,
+          id: { [Op.ne]: newTransaction.id }
         },
-        order: [['transaction_date', 'ASC']],
+        order: [['transaction_date', 'ASC'], ['id', 'ASC']],
         transaction: t,
         lock: t.LOCK.UPDATE // prevents race conditions
       });
 
-      let remainingPayment = amount; // e.g. 1500
+      let remainingPayment = amt; // e.g. 1500
 
       for (const trx of unpaidTransactions) {
         if (remainingPayment <= 0) break;
 
-        const trxRemaining = parseFloat(trx.remainingAmount);
+        const trxRemaining = Number(trx.remainingAmount);   // ✅ always numeric
+        const trxPaid      = Number(trx.paidAmount);
 
         if (remainingPayment >= trxRemaining) {
           // FULLY PAY THIS TRANSACTION
           await trx.update({
-            paidAmount: Sequelize.literal(`paidAmount + ${trxRemaining}`),
+            paidAmount:      trxPaid + trxRemaining,
             remainingAmount: 0
           }, { transaction: t });
 
           remainingPayment -= trxRemaining;
-
         } else {
           // PARTIALLY PAY THIS TRANSACTION
           await trx.update({
-            paidAmount: Sequelize.literal(`paidAmount + ${remainingPayment}`),
-            remainingAmount: Sequelize.literal(`remainingAmount - ${remainingPayment}`)
+            paidAmount:      trxPaid + remainingPayment,
+            remainingAmount: trxRemaining - remainingPayment
           }, { transaction: t });
 
           remainingPayment = 0;
@@ -208,6 +230,9 @@ router.post('/customer', async (req, res) => {
       }
     }
 
+     // -------------------- MIRROR TRANSACTION --------------------
+    // NOTE: createMirrorTransaction MUST accept & forward `t`, otherwise the
+    // afterCreate hook on Transaction will throw "must run inside a DB transaction".
     await createMirrorTransaction(newTransaction, t);
     // Commit transaction
     await t.commit();
@@ -227,7 +252,7 @@ router.post('/customer', async (req, res) => {
     });
 
   } catch (error) {
-    await t.rollback();
+    if (!t.finished) await t.rollback();
     console.error("Transaction error:", error);
 
     return res.status(500).json({
@@ -244,6 +269,7 @@ router.post('/supplier', async (req, res) => {
     // -------------------- VALIDATE INPUT --------------------
     const { error, value } = transactionSchema.validate(req.body);
     if (error) {
+      await t.rollback();
       return res.status(400).json({
         error: "Validation error",
         message: error.details[0].message
@@ -252,19 +278,42 @@ router.post('/supplier', async (req, res) => {
     const {
       supplier_id,
       ownerId,
+      bill_id,
       transaction_type,
       transaction_for,
       transaction_pic,
-      remainingAmount,
-      paidAmount,
-      amount, created_user,
+      amount, 
+      created_user,
       paymentType,
       due_date,
       description,
-      transaction_date
+      is_Approved,
+      transaction_date,
+      status
     } = value;
 
     const userId = req.body.userId;
+
+    // -------------------- SERVER-SIDE DERIVE paidAmount / remainingAmount --------------------
+    // Never trust the client for these — they MUST stay consistent with paymentType.
+    const amt = Number(amount);
+    let paidAmount = 0;
+    let remainingAmount = 0;
+
+    if (paymentType === 'paid') {
+      paidAmount = amt;
+      remainingAmount = 0;
+    } else if (paymentType === 'credit') {
+      paidAmount = 0;
+      remainingAmount = amt;
+    } else {
+      await t.rollback();
+      return res.status(400).json({
+        error: "Validation error",
+        message: "paymentType must be either 'paid' or 'credit'"
+      });
+    }
+
     // -------------------- VERIFY USER --------------------
     const user = await User.findOne({
       where: { id: userId },
@@ -299,45 +348,59 @@ router.post('/supplier', async (req, res) => {
     // -------------------- CREATE TRANSACTION --------------------
     const newTransaction = await Transaction.create({
       business_owner_id: ownerId,
-      created_user: userId,
+      created_user: created_user || userId,
       supplier_id,
       transaction_type,
       transaction_for,
       transaction_pic,
       remainingAmount,
       paidAmount,
-      amount, created_user,
+      bill_id,
+      amount: amt, 
+      created_user,
       paymentType,
       due_date,
       description: description || null,
-      transaction_date
+      is_Approved,
+      transaction_date,
+      status
     }, { transaction: t });
-    if (transaction_type === "you_got") {
+
+    // -------------------- FIFO PAYDOWN ON "you_got" --------------------
+    // Only a "you_got" transaction (money received from supplier) pays down
+    // outstanding credit invoices. A "you_gave" adds a NEW unpaid invoice,
+    // and "you_discount" only adjusts balance/total_discount.
+    if (transaction_type === "you_got" && amt > 0) {
 
       const unpaidTransactions = await Transaction.findAll({
         where: {
           supplier_id,
           business_owner_id: userId,
+          paymentType: 'credit',
+          transaction_type: 'you_gave',        // only credit invoices can be paid down
           remainingAmount: {
             [Op.gt]: 0
-          }
+          },
+          is_Deleted: false,
+          id: { [Op.ne]: newTransaction.id },
         },
-        order: [['transaction_date', 'ASC']],
+        order: [['transaction_date', 'ASC'], ['id', 'ASC']],
         transaction: t,
         lock: t.LOCK.UPDATE // prevents race conditions
       });
 
-      let remainingPayment = amount; // e.g. 1500
+      let remainingPayment = amt; // e.g. 1500
 
       for (const trx of unpaidTransactions) {
         if (remainingPayment <= 0) break;
 
-        const trxRemaining = parseFloat(trx.remainingAmount);
+        const trxRemaining = Number(trx.remainingAmount);   // ✅ always numeric
+        const trxPaid      = Number(trx.paidAmount);
 
         if (remainingPayment >= trxRemaining) {
           // FULLY PAY THIS TRANSACTION
           await trx.update({
-            paidAmount: Sequelize.literal(`paidAmount + ${trxRemaining}`),
+            paidAmount:      trxPaid + trxRemaining,
             remainingAmount: 0
           }, { transaction: t });
 
@@ -346,14 +409,18 @@ router.post('/supplier', async (req, res) => {
         } else {
           // PARTIALLY PAY THIS TRANSACTION
           await trx.update({
-            paidAmount: Sequelize.literal(`paidAmount + ${remainingPayment}`),
-            remainingAmount: Sequelize.literal(`remainingAmount - ${remainingPayment}`)
+            paidAmount:      trxPaid + remainingPayment,
+            remainingAmount: trxRemaining - remainingPayment
           }, { transaction: t });
 
           remainingPayment = 0;
         }
       }
     }
+
+     // -------------------- MIRROR TRANSACTION --------------------
+    // NOTE: createMirrorTransaction MUST accept & forward `t`, otherwise the
+    // afterCreate hook on Transaction will throw "must run inside a DB transaction".
     await createMirrorTransaction(newTransaction, t);
 
     await t.commit();
@@ -373,7 +440,7 @@ router.post('/supplier', async (req, res) => {
     });
 
   } catch (error) {
-    await t.rollback();
+    if (!t.finished) await t.rollback();
     console.error("Supplier Transaction Error:", error);
 
     return res.status(500).json({
@@ -956,7 +1023,7 @@ router.post('/ledger/:customer_id', async (req, res) => {
 
 router.post('/userLedger/', async (req, res) => {
   try {
-    const { userId,ownerId, transaction_for } = req.body;
+    const { userId, ownerId, transaction_for } = req.body;
 
     if (!userId) {
       return res.status(400).json({ error: 'userId is required' });
@@ -995,7 +1062,7 @@ router.post('/userLedger/', async (req, res) => {
       where: {
         transaction_for,
         business_owner_id: ownerId,
-        created_user:userId
+        created_user: userId
       },
       attributes,
       include,
@@ -1199,7 +1266,7 @@ router.put('/delete/:id', async (req, res) => {
 
     // Fetch the transaction
     const transaction = await Transaction.findOne({
-      where: { id: transactionId, business_owner_id: ownerId,created_user:userId},
+      where: { id: transactionId, business_owner_id: ownerId, created_user: userId },
       transaction: t,
     });
 
@@ -1266,12 +1333,22 @@ router.put('/delete/:id', async (req, res) => {
       userBalance += amount;
       userCredit -= amount;
 
+      user.credit_given_count = Math.max(0, Number(user.credit_given_count) - 1);
+
     } else if (transaction.transaction_type === "you_got") {
       newBalance -= amount;
       newPayment -= amount;
 
       userBalance -= amount;
       userPayment -= amount;
+
+      user.payment_got_count = Math.max(0, Number(user.payment_got_count) - 1);
+    } else if (transaction.transaction_type === "you_discount") {
+      // discount was "added" to balance; reverse = subtract
+      newBalance -= amount;
+      userBalance -= amount;
+      user.total_discount_given = Number(user.total_discount_given || 0) - amount;
+      targetRecord.total_discount_got = Number(targetRecord.total_discount_got || 0) - amount;
     }
 
     // Update target (customer or supplier)
@@ -1280,6 +1357,9 @@ router.put('/delete/:id', async (req, res) => {
         current_balance: newBalance,
         total_credit_given: newCredit,
         total_payment_got: newPayment,
+        ...(transaction.transaction_type === "you_discount" && {
+          total_discount_got: targetRecord.total_discount_got
+        })
       },
       { transaction: t }
     );
@@ -1290,6 +1370,11 @@ router.put('/delete/:id', async (req, res) => {
         current_balance: userBalance,
         total_credit_given: userCredit,
         total_payment_got: userPayment,
+        credit_given_count: user.credit_given_count,
+        payment_got_count: user.payment_got_count,
+        ...(transaction.transaction_type === "you_discount" && {
+          total_discount_given: user.total_discount_given
+        })
       },
       { transaction: t }
     );

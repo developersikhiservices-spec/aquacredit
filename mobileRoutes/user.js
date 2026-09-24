@@ -111,7 +111,7 @@ const createRelatedCustomerTransaction = async (id, transactionType, user_id) =>
     }
   })
 
-  if (existingTransaction) {
+  if (!existingTransaction.length) {
     return
   } else {
     existingTransaction.forEach(async transaction => {
@@ -274,7 +274,7 @@ const createRelatedSupplierTransaction = async (id, transactionType, user_id) =>
     }
   })
 
-  if (existingTransaction) {
+  if (!existingTransaction.length) {
     return
   } else {
     existingTransaction.forEach(async transaction => {

@@ -165,73 +165,65 @@ const Transaction = sequelize.define('Transaction', {
 });
 
 Transaction.afterCreate(async (transaction, options) => {
-
   const t = options.transaction;
-
   if (!t) {
     throw new Error("Transaction hook must run inside a DB transaction");
   }
 
   const amt = Number(transaction.amount);
+  const businessOwnerId = transaction.business_owner_id;
 
-  // 🔒 Lock User
-  const user = await User.findOne({
-    where: { id: transaction.created_user },
+  // Lock the business owner (not the created_user)
+  const user = await User.findByPk(businessOwnerId, {
     transaction: t,
     lock: t.LOCK.UPDATE
   });
-
-  if (!user) throw new Error("User not found in afterCreate hook");
+  if (!user) throw new Error("Business owner not found in afterCreate hook");
 
   // ===============================
   // CUSTOMER TRANSACTION
   // ===============================
   if (transaction.transaction_for === "customer") {
-
-    const customer = await Customer.findOne({
-      where: { id: transaction.customer_id },
+    const customer = await Customer.findByPk(transaction.customer_id, {
       transaction: t,
       lock: t.LOCK.UPDATE
     });
-
     if (!customer) throw new Error("Customer not found in afterCreate hook");
 
     if (transaction.transaction_type === "you_gave") {
-
-      await user.update({
-        current_balance: Number(user.current_balance) - amt,
-        total_credit_given: Number(user.total_credit_given) + amt,
-        credit_given_count: user.credit_given_count + 1
+      await user.increment({
+        current_balance: -amt,
+        total_credit_given: amt,
+        credit_given_count: 1
       }, { transaction: t });
 
-      await customer.update({
-        current_balance: Number(customer.current_balance) - amt,
-        total_credit_given: Number(customer.total_credit_given) + amt
+      await customer.increment({
+        current_balance: -amt,
+        total_credit_given: amt
       }, { transaction: t });
 
     } else if (transaction.transaction_type === "you_got") {
-
-      await user.update({
-        current_balance: Number(user.current_balance) + amt,
-        total_payment_got: Number(user.total_payment_got) + amt,
-        payment_got_count: user.payment_got_count + 1
+      await user.increment({
+        current_balance: amt,
+        total_payment_got: amt,
+        payment_got_count: 1
       }, { transaction: t });
 
-      await customer.update({
-        current_balance: Number(customer.current_balance) + amt,
-        total_payment_got: Number(customer.total_payment_got) + amt
+      await customer.increment({
+        current_balance: amt,
+        total_payment_got: amt
       }, { transaction: t });
 
     } else if (transaction.transaction_type === "you_discount") {
-
-      await user.update({
-        current_balance: Number(user.current_balance) + amt,
-        total_discount_given: Number(user.total_discount_given) + amt
+      await user.increment({
+        current_balance: amt,
+        total_discount_given: amt
       }, { transaction: t });
 
-      await customer.update({
-        current_balance: Number(customer.current_balance) + amt,
-        total_discount_given: Number(customer.total_discount_given) + amt
+      // FIX: Customer has total_discount_got, not total_discount_given
+      await customer.increment({
+        current_balance: amt,
+        total_discount_got: amt
       }, { transaction: t });
     }
   }
@@ -240,57 +232,63 @@ Transaction.afterCreate(async (transaction, options) => {
   // SUPPLIER TRANSACTION
   // ===============================
   else if (transaction.transaction_for === "supplier") {
-
-    const supplier = await Supplier.findOne({
-      where: { id: transaction.supplier_id },
+    const supplier = await Supplier.findByPk(transaction.supplier_id, {
       transaction: t,
       lock: t.LOCK.UPDATE
     });
-
     if (!supplier) throw new Error("Supplier not found in afterCreate hook");
 
     if (transaction.transaction_type === "you_gave") {
-
-      await user.update({
-        current_balance: Number(user.current_balance) - amt,
-        total_credit_given: Number(user.total_credit_given) + amt,
-        credit_given_count: user.credit_given_count + 1
+      await user.increment({
+        current_balance: -amt,
+        total_credit_given: amt,
+        credit_given_count: 1
       }, { transaction: t });
 
-      await supplier.update({
-        current_balance: Number(supplier.current_balance) - amt,
-        total_credit_given: Number(supplier.total_credit_given) + amt
+      await supplier.increment({
+        current_balance: -amt,
+        total_credit_given: amt
       }, { transaction: t });
 
     } else if (transaction.transaction_type === "you_got") {
-
-      await user.update({
-        current_balance: Number(user.current_balance) + amt,
-        total_payment_got: Number(user.total_payment_got) + amt,
-        payment_got_count: user.payment_got_count + 1
+      await user.increment({
+        current_balance: amt,
+        total_payment_got: amt,
+        payment_got_count: 1
       }, { transaction: t });
 
-      await supplier.update({
-        current_balance: Number(supplier.current_balance) + amt,
-        total_payment_got: Number(supplier.total_payment_got) + amt
+      await supplier.increment({
+        current_balance: amt,
+        total_payment_got: amt
       }, { transaction: t });
 
     } else if (transaction.transaction_type === "you_discount") {
-
-      await user.update({
-        current_balance: Number(user.current_balance) + amt,
-        total_discount_given: Number(user.total_discount_given) + amt
+      await user.increment({
+        current_balance: amt,
+        total_discount_given: amt
       }, { transaction: t });
 
-      await supplier.update({
-        current_balance: Number(supplier.current_balance) + amt,
-        total_discount_given: Number(supplier.total_discount_given) + amt
+      // FIX: Supplier has total_discount_got, not total_discount_given
+      await supplier.increment({
+        current_balance: amt,
+        total_discount_got: amt
       }, { transaction: t });
     }
   }
 
-  if (transaction.bill_id !== null) {
-    const bill = await Bill.findOne({ where: { id: transaction.bill_id } })
+  // Update linked bill if present
+  console.log("AFTER CREATE BILL DEBUG:", {
+    transactionId: transaction.id,
+    bill_id: transaction.bill_id,
+    bill_id_type: typeof transaction.bill_id
+  });
+
+  if (transaction.bill_id !== null && transaction.bill_id !== undefined) {
+    const bill = await Bill.findByPk(transaction.bill_id, {
+      transaction: t,
+      lock: t.LOCK.UPDATE
+    });
+
     if (bill) {
       await bill.update(
         { transaction_id: transaction.id },
@@ -298,7 +296,5 @@ Transaction.afterCreate(async (transaction, options) => {
       );
     }
   }
-
 });
-
 module.exports = Transaction;

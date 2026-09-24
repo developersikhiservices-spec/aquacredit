@@ -15,7 +15,7 @@ router.use(authorizeRole('business_owner', 'admin'));
 // Validation schemas
 const transactionSchema = Joi.object({
   customer_id: Joi.number().integer().positive().required(),
-  transaction_type: Joi.string().valid('you_gave', 'you_got').required(),
+  transaction_type: Joi.string().valid('you_gave', 'you_got','you_discount').required(),
   amount: Joi.number().positive().precision(2).required(),
   description: Joi.string().max(1000).optional().allow(''),
   ownerId: Joi.number().integer().positive().required(),

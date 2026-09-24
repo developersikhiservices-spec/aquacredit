@@ -67,6 +67,10 @@ const Supplier = sequelize.define('Supplier', {
     type: DataTypes.DECIMAL(15, 2),
     defaultValue: 0.00
   },
+  total_payment_got: {
+    type: DataTypes.DECIMAL(15, 2),
+    defaultValue: 0.00
+  },
   total_discount_got: {
     type: DataTypes.DECIMAL(15, 2),
     defaultValue: 0.00
@@ -79,18 +83,9 @@ const Supplier = sequelize.define('Supplier', {
     type: DataTypes.STRING,
     allowNull: true
   },
-  
-  delay_days: {
+    delay_days: {
     type: DataTypes.INTEGER,
     defaultValue: 0
-  },
-  total_payment_got: {
-    type: DataTypes.DECIMAL(15, 2),
-    defaultValue: 0.00
-  },
-  total_discount_got: {
-    type: DataTypes.DECIMAL(15, 2),
-    defaultValue: 0.00
   },
   status: {
     type: DataTypes.STRING,

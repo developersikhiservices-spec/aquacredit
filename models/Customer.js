@@ -92,7 +92,7 @@ const Customer = sequelize.define('Customer', {
   },
 
   status: {
-    type: DataTypes.STRING(15, 2),
+    type: DataTypes.STRING(15),
     defaultValue: 'Active'
   }
 }, {

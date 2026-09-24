@@ -9,6 +9,7 @@ const { Transaction } = require('../models');
 async function applyBalanceChanges({ type, amount, customerOrSupplier, user, reverse = false }) {
   const amt = Number(amount);
   const factor = reverse ? -1 : 1;
+  const isCustOrSupp = !!customerOrSupplier;
 
   if (type === "you_gave") {
     // you_gave: you give credit to customer/supplier
@@ -16,27 +17,28 @@ async function applyBalanceChanges({ type, amount, customerOrSupplier, user, rev
     user.total_credit_given = Number(user.total_credit_given) + (amt * factor);
     if (!reverse) user.credit_given_count += 1;
     else user.credit_given_count -= 1;
-
-    customerOrSupplier.current_balance = Number(customerOrSupplier.current_balance) - (amt * factor);
-    customerOrSupplier.total_credit_given = Number(customerOrSupplier.total_credit_given) + (amt * factor);
-
+    if (isCustOrSupp) {
+      customerOrSupplier.current_balance = Number(customerOrSupplier.current_balance) - (amt * factor);
+      customerOrSupplier.total_credit_given = Number(customerOrSupplier.total_credit_given) + (amt * factor);
+    }
   } else if (type === "you_got") {
     // you_got: you receive payment from customer/supplier
     user.current_balance = Number(user.current_balance) + (amt * factor);
     user.total_payment_got = Number(user.total_payment_got) + (amt * factor);
     if (!reverse) user.payment_got_count += 1;
     else user.payment_got_count -= 1;
-
-    customerOrSupplier.current_balance = Number(customerOrSupplier.current_balance) + (amt * factor);
-    customerOrSupplier.total_payment_got = Number(customerOrSupplier.total_payment_got) + (amt * factor);
-
+    if (isCustOrSupp) {
+      customerOrSupplier.current_balance = Number(customerOrSupplier.current_balance) + (amt * factor);
+      customerOrSupplier.total_payment_got = Number(customerOrSupplier.total_payment_got) + (amt * factor);
+    }
   } else if (type === "you_discount") {
     // you_discount: you give discount
     user.current_balance = Number(user.current_balance) + (amt * factor);
     user.total_discount_given = Number(user.total_discount_given) + (amt * factor);
-
-    customerOrSupplier.current_balance = Number(customerOrSupplier.current_balance) + (amt * factor);
-    customerOrSupplier.total_discount_given = Number(customerOrSupplier.total_discount_given) + (amt * factor);
+    if (isCustOrSupp) {
+      customerOrSupplier.current_balance = Number(customerOrSupplier.current_balance) + (amt * factor);
+      customerOrSupplier.total_discount_got = Number(customerOrSupplier.total_discount_got) + (amt * factor);
+    }
   }
 }
 
@@ -193,23 +195,23 @@ async function createMirrorTransaction(originalTransaction, t) {
 
   const relatedEntity = trx.transaction_for === "customer"
     ? await Supplier.findOne({
-        where: { created_user: oppositeUser.id, mobile: creatorUser.mobile },
-        transaction: t
-      })
+      where: { created_user: oppositeUser.id, mobile: creatorUser.mobile },
+      transaction: t
+    })
     : await Customer.findOne({
-        where: { created_user: oppositeUser.id, mobile: creatorUser.mobile },
-        transaction: t
-      });
+      where: { created_user: oppositeUser.id, mobile: creatorUser.mobile },
+      transaction: t
+    });
 
   if (!relatedEntity) return;
 
   const oppositeType =
     trx.transaction_type === "you_gave" ? "you_got" :
-    trx.transaction_type === "you_got" ? "you_gave" :
-    "you_discount";
+      trx.transaction_type === "you_got" ? "you_gave" :
+        "you_discount";
 
-// Generate a unique group ID for this transaction pair
-const transactionGroupId = `group_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  // Generate a unique group ID for this transaction pair
+  const transactionGroupId = `group_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
   // Create mirror transaction
   const mirrorTransaction = await Transaction.create({
@@ -228,8 +230,8 @@ const transactionGroupId = `group_${Date.now()}_${Math.random().toString(36).sub
     paymentType: trx.paymentType,
     transaction_pic: trx.transaction_pic,
     bill_id: trx.bill_id,
-    is_Approved:trx.is_Approved,
-    status:trx.status,
+    is_Approved: trx.is_Approved,
+    status: trx.status,
     transaction_group_id: transactionGroupId, // Store group ID
     mirror_transaction_id: null // Will update after both are created
   }, { transaction: t });
@@ -283,18 +285,18 @@ async function updateMirrorTransaction(oldTransaction, updatedData, t) {
     let oppositeEntity = null;
     if (mirrorTransaction.transaction_for === "customer") {
       oppositeEntity = await Customer.findOne({
-        where: { 
+        where: {
           id: mirrorTransaction.customer_id,
-          business_owner_id: oppositeUser.id 
+          business_owner_id: oppositeUser.id
         },
         transaction: t,
         lock: t.LOCK.UPDATE
       });
     } else {
       oppositeEntity = await Supplier.findOne({
-        where: { 
+        where: {
           id: mirrorTransaction.supplier_id,
-          business_owner_id: oppositeUser.id 
+          business_owner_id: oppositeUser.id
         },
         transaction: t,
         lock: t.LOCK.UPDATE
@@ -307,10 +309,10 @@ async function updateMirrorTransaction(oldTransaction, updatedData, t) {
     }
 
     // Calculate opposite transaction type
-    const oppositeType = 
+    const oppositeType =
       updatedData.transaction_type === "you_gave" ? "you_got" :
-      updatedData.transaction_type === "you_got" ? "you_gave" :
-      "you_discount";
+        updatedData.transaction_type === "you_got" ? "you_gave" :
+          "you_discount";
 
     // Reverse old mirror transaction effects
     await applyBalanceChanges({
@@ -388,9 +390,9 @@ async function updateMirrorTransactionForBill(oldTransaction, updateData, t) {
     let oppositeEntity = null;
     if (mirrorTransaction.transaction_for === "customer") {
       oppositeEntity = await Customer.findOne({
-        where: { 
+        where: {
           id: mirrorTransaction.customer_id,
-          business_owner_id: oppositeUser.id 
+          business_owner_id: oppositeUser.id
         },
         transaction: t,
         lock: t.LOCK.UPDATE
@@ -405,10 +407,10 @@ async function updateMirrorTransactionForBill(oldTransaction, updateData, t) {
     // If amount is being updated, reverse old and apply new
     if (updateData.amount !== undefined && updateData.amount !== oldTransaction.amount) {
       // Calculate opposite transaction type
-      const oppositeType = 
+      const oppositeType =
         oldTransaction.transaction_type === "you_gave" ? "you_got" :
-        oldTransaction.transaction_type === "you_got" ? "you_gave" :
-        "you_discount";
+          oldTransaction.transaction_type === "you_got" ? "you_gave" :
+            "you_discount";
 
       // Reverse old mirror transaction effects
       await applyBalanceChanges({
@@ -451,10 +453,10 @@ async function updateMirrorTransactionForBill(oldTransaction, updateData, t) {
   }
 }
 
-module.exports = { 
+module.exports = {
   createMirrorTransaction,
   updateMirrorTransaction,
   updateMirrorTransactionForBill,
   handlePaymentDistribution,
-  reversePaymentDistribution 
+  reversePaymentDistribution
 };
