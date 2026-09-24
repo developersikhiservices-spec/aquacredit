@@ -497,7 +497,6 @@ router.put('/customer/:id', async (req, res) => {
 
     if (!oldTx) {
       await t.rollback();
-    
       return res.status(404).json({
         message: "Transaction not found"
       });

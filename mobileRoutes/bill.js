@@ -189,7 +189,7 @@ router.put('/:id', async (req, res) => {
       console.log("oldTx::",bill.id)
 
       const oldTx = await Transaction.findOne({
-        where: { bill_id: bill.id },
+        where: { bill_id: bill.id,transaction_for:bill.transaction_for },
         transaction: t,
         lock: t.LOCK.UPDATE
       });
