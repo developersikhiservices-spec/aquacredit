@@ -483,8 +483,14 @@ router.put('/customer/:id', async (req, res) => {
       lock: t.LOCK.UPDATE
     });
 
-    if (!oldTx) return res.status(404).json({ message: "Transaction not found" });
-    // Fetch user with lock
+    if (!oldTx) {
+      await t.rollback();
+    
+      return res.status(404).json({
+        message: "Transaction not found"
+      });
+    }
+        // Fetch user with lock
     const user = await User.findOne({
       where: { id: userId },
       transaction: t,

@@ -257,10 +257,10 @@ router.put('/:id', async (req, res) => {
           if (Object.keys(transactionUpdateFields).length > 0) {
             await oldTx.update(transactionUpdateFields, { transaction: t });
 
-            // Update mirror transaction if exists
-            if (oldTx.mirror_transaction_id) {
-              await updateMirrorTransaction(oldTx, transactionUpdateFields, t);
-            }
+            // // Update mirror transaction if exists
+            // if (oldTx.mirror_transaction_id) {
+            //   await updateMirrorTransaction(oldTx, transactionUpdateFields, t);
+            // }
 
             transactionUpdateResult = oldTx;
           }
@@ -286,8 +286,17 @@ router.put('/:id', async (req, res) => {
 
   } catch (error) {
     console.error('Update bill error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+  
+    if (!t.finished) {
+      await t.rollback();
+    }
+  
+    return res.status(500).json({
+      error: 'Internal server error',
+      message: error.message
+    });
   }
+  
 });
 
 // Delete Bill by ID
