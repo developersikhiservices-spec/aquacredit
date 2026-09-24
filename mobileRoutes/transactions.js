@@ -569,10 +569,10 @@ router.put('/supplier/:id', async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const transactionId = req.params.id;
-    console.log("ID::",transactionId)
     // Validate input
     const { error, value } = updateTransactionSchema.validate(req.body);
     if (error) {
+      console.log("roll back::",)
       await t.rollback();
       return res.status(400).json({ error: "Validation error", message: error.details[0].message });
     }
@@ -600,6 +600,7 @@ router.put('/supplier/:id', async (req, res) => {
 
     if (!oldTx) {
       await t.rollback();
+      console.log("oldTx rollback::");
       return res.status(404).json({ message: "Transaction not found" });
     }
     // Fetch user with lock
@@ -620,6 +621,7 @@ router.put('/supplier/:id', async (req, res) => {
     });
 
     if (!user || !supplier) {
+      console.log("user rollback::");
       await t.rollback();
       return res.status(404).json({ error: "Not found", message: "User or Supplier not found" });
     }
@@ -633,6 +635,8 @@ router.put('/supplier/:id', async (req, res) => {
       paymentType: paymentType !== undefined ? paymentType : oldTx.paymentType,
       transaction_date: transaction_date || oldTx.transaction_date
     };
+    console.log("updatedData::");
+
     // Reverse OLD transaction changes
     applyBalanceChanges({
       type: oldTx.transaction_type,
@@ -666,7 +670,7 @@ router.put('/supplier/:id', async (req, res) => {
     const updatedTx = await Transaction.findByPk(oldTx.id, {
       include: [{ model: Supplier, as: "supplier", attributes: ["name", "mobile"] }]
     });
-
+    console.log("updatedData::",updatedTx);
     return res.status(200).json({
       message: "supplier transaction updated successfully",
       transaction: updatedTx
