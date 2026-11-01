@@ -5,7 +5,7 @@ const { Op } = require('sequelize');
 const router = express.Router();
 
 // Utility: Generate random 5-digit OTP
-const generateOTP = () => Math.floor(10000 + Math.random() * 90000).toString();
+const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
 
 // Send OTP
 router.post('/send', async (req, res) => {
@@ -91,7 +91,7 @@ router.post('/verify', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const otpRecord = await otp.findOne({
+    const otpRecord = await Otp.findOne({
       where: {
         user_id: user.id,
         otp,
@@ -106,7 +106,7 @@ router.post('/verify', async (req, res) => {
     }
 
     // Mark OTP as used
-    await otp.update(
+    await Otp.update(
       { is_used: true },
       { where: { id: otpRecord.id } }
     );

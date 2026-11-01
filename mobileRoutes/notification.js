@@ -58,6 +58,31 @@ router.post("/", async (req, res) => {
   }
 });
 
+router.post("/deleteRequest", async (req, res) => {
+  const {UserId,userName}=req.body
+  try {
+    const notification = await Notification.create({
+      user_id: UserId,
+      title: "Delete Request",
+      message: `Delete request raised by user ${userName}`,
+      type: 'delete_request'
+    });
+
+    res.status(201).json({
+      message: "Notification created successfully",
+      notification
+    });
+
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: "Failed to create notification",
+      message: "Internal server error"
+    });
+  }
+});
+
 router.get("/", async (req, res) => {
   try {
 
