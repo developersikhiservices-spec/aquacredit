@@ -163,6 +163,18 @@ const Transaction = sequelize.define('Transaction', {
     }
   ]
 });
+/* ────────────────────────────────────────────────────────────────
+ * Helper: should the existing due date be replaced by the new one?
+ * Rule → keep the NEAREST (earliest) upcoming due date.
+ *   • no existing due  → adopt the new one
+ *   • new is earlier   → adopt the new one
+ *   • new is equal or later → keep existing
+ * ──────────────────────────────────────────────────────────────── */
+function shouldReplaceDueDate(existingDue, newDue) {
+  if (!newDue) return false;                                 // nothing to sync
+  if (!existingDue) return true;                             // no due set yet
+  return new Date(newDue).getTime() < new Date(existingDue).getTime();
+}
 
 Transaction.afterCreate(async (transaction, options) => {
   const t = options.transaction;
@@ -226,6 +238,19 @@ Transaction.afterCreate(async (transaction, options) => {
         total_discount_got: amt
       }, { transaction: t });
     }
+    // ───── Due-date maintenance ─────
+    // Sync only when the new transaction actually carries an outstanding
+    // due (remainingAmount > 0). A fully-paid or received payment row has no
+    // meaningful upcoming due, so we skip it. If you literally want "any
+    // transaction with a due date", drop `hasOutstanding` below.
+    const hasOutstanding = Number(transaction.remainingAmount) > 0 && !!transaction.due_date;
+
+    if (hasOutstanding && shouldReplaceDueDate(customer.due_date, transaction.due_date)) {
+      await customer.update(
+        { due_date: transaction.due_date },
+        { transaction: t }
+      );
+    }
   }
 
   // ===============================
@@ -273,6 +298,15 @@ Transaction.afterCreate(async (transaction, options) => {
         current_balance: amt,
         total_discount_got: amt
       }, { transaction: t });
+    }
+    // ───── Due-date maintenance ─────
+    const hasOutstanding = Number(transaction.remainingAmount) > 0 && !!transaction.due_date;
+
+    if (hasOutstanding && shouldReplaceDueDate(supplier.due_date, transaction.due_date)) {
+      await supplier.update(
+        { due_date: transaction.due_date },
+        { transaction: t }
+      );
     }
   }
 

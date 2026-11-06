@@ -79,7 +79,8 @@ const Customer = sequelize.define('Customer', {
   },
   due_date: {
     type: DataTypes.DATE,
-    allowNull: true
+    allowNull: true,
+    comment:"Upcomming due date"
   },
   defaulter_stage: {
     type: DataTypes.STRING,

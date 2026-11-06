@@ -63,9 +63,15 @@ app.use(cors({
    RAZORPAY WEBHOOK (FIRST)
 =========================== */
 app.use(
-  '/9023/api/payment_rozarpay',
-  express.raw({ type: 'application/json' }),
-  rozarpayOrdersRoutes
+  express.json({
+    limit: '10mb',
+    verify: (req, res, buf) => {
+      // Only the webhook needs the raw bytes for HMAC verification
+      if (req.originalUrl.includes('/razorpay-webhook')) {
+        req.rawBody = buf;
+      }
+    },
+  })
 );
 
 /* ===========================

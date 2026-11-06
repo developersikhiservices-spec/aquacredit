@@ -19,6 +19,12 @@ router.post('/businessOwner', async (req, res) => {
       status: { [Op.in]: ["Active", "Defaulter"] } 
     };
     
+    const dueDateFirstOrder = (alias) => [
+      [literal(`\`${alias}\`.\`due_date\` IS NULL`), 'ASC'],
+      [literal(`\`${alias}\`.\`due_date\``), 'ASC'],
+      [literal(`\`${alias}\`.\`id\``), 'DESC']
+    ];
+
     const CustomersCount = await Customer.count({ where: whereCondition});
     const Customers = await Customer.findAll({
       where: whereCondition,
@@ -46,7 +52,8 @@ router.post('/businessOwner', async (req, res) => {
           ]
         ]
       },
-      group: ['Customer.id']
+      group: ['Customer.id'],
+      order: dueDateFirstOrder('Customer')
     });    
     const SupplierCount = await Supplier.count({ where: whereCondition });
     const Suppliers = await Supplier.findAll({ where: whereCondition,      
@@ -74,7 +81,8 @@ router.post('/businessOwner', async (req, res) => {
         ]
       ]
     },
-    group: ['Supplier.id']
+    group: ['Supplier.id'],
+    order: dueDateFirstOrder('Supplier')
 });
     
     res.status(200).json({

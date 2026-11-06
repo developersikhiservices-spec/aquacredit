@@ -19,8 +19,7 @@ const razorpay = new Razorpay({
 // Record new transaction
 router.post("/create-order", async (req, res) => {
   try {
-    const body = JSON.parse(req.body.toString());
-    const { amount, currency = "INR", subscriber_name, subscriber_email, subscriber_phone, subscribePlan, purchased_user_count = 1 } = body;
+    const { amount, currency = "INR", subscriber_name, subscriber_email, subscriber_phone, subscribePlan, purchased_user_count = 1 } = req.body;
 
     // Get plan details to verify price and calculate total
     const plan = await Plan.findOne({
@@ -90,6 +89,11 @@ router.post("/verify-payment", async (req, res) => {
       NOU
     } = req.body;
 
+console.log("rrr::",razorpay_order_id,"\n",
+  razorpay_payment_id,"\n",
+  razorpay_signature,"\n",
+  subscriber_phone,"\n",
+  NOU)
     // Generate signature for verification
     const generated_signature = crypto
       .createHmac("sha256", razorpay.key_secret)
@@ -297,9 +301,8 @@ router.post("/razorpay-webhook", async (req, res) => {
 // Add more users to existing subscription
 router.post("/add-subscription-users", async (req, res) => {
   try {
-    const body = JSON.parse(req.body.toString());
 
-    const { subscription_id, additional_user_count, user_id, subscriber_name, subscriber_email, subscriber_phone } = body;
+    const { subscription_id, additional_user_count, user_id, subscriber_name, subscriber_email, subscriber_phone } = req.body;
 
     // Validate required fields
 
@@ -409,12 +412,11 @@ router.post("/add-subscription-users", async (req, res) => {
 // Verify additional users payment and add members
 router.post("/verify-additional-users-payment", async (req, res) => {
   try {
-    const body = JSON.parse(req.body.toString());
     const {
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature,
-    } = body;
+    } = req.body;
 
     console.log("=== VERIFY ADDITIONAL USERS PAYMENT ===");
 
@@ -567,8 +569,7 @@ router.post("/verify-additional-users-payment", async (req, res) => {
 // Renew subscription
 router.post("/renew-subscription", async (req, res) => {
   try {
-    const body = JSON.parse(req.body.toString());
-    const { subscription_id, user_id, subscriber_name, subscriber_email, subscriber_phone } = body;
+    const { subscription_id, user_id, subscriber_name, subscriber_email, subscriber_phone } = req.body;
 
     // Find current subscription
     const currentSubscription = await Subscription.findOne({
@@ -638,13 +639,12 @@ router.post("/renew-subscription", async (req, res) => {
 // Verify renewal payment and create new subscription
 router.post("/verify-renewal-payment", async (req, res) => {
   try {
-    const body = JSON.parse(req.body.toString());
 
     const {
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature
-    } = body;
+    } = req.body;
 
     // Verify signature
     const generated_signature = crypto
@@ -746,7 +746,7 @@ router.post("/verify-renewal-payment", async (req, res) => {
         SubscriptionMember.update({
           subscription_id: newSubscription.id,
           user_id: member.user_id
-        },{where:{subscription_id:original_subscription_id,user_id: member.user_id}})
+        }, { where: { subscription_id: original_subscription_id, user_id: member.user_id } })
       );
       await Promise.all(memberPromises);
     }

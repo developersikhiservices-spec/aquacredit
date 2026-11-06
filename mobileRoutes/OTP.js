@@ -45,6 +45,32 @@ router.post('/send', async (req, res) => {
   }
 });
 
+router.post('/send_userDelete', async (req, res) => {
+  try {
+    const { mobile } = req.body;
+
+    if (!mobile) {
+      return res.status(400).json({ error: 'Mobile number is required' });
+    }
+    const user = await User.findOne({ where: { mobile } });
+    const otp = generateOTP();
+    const expiry = new Date(Date.now() + 5 * 60 * 1000); // 5 mins expiry
+    if (!user) {
+      res.status(401).json({ error: 'user not found' });
+    } else {
+      await Otp.create({
+        user_id: user.id,
+        otp,
+        expires_at: expiry
+      });
+    }
+    res.json({ success: true, message: 'OTP sent successfully', otp }); // ⚠️ remove otp in production
+  } catch (error) {
+    console.error('Send OTP error:', error);
+    res.status(500).json({ error: 'Failed to send OTP' });
+  }
+});
+
 // Resend OTP
 router.post('/resend', async (req, res) => {
   try {
