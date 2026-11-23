@@ -13,7 +13,7 @@ const router = express.Router();
 
 router.post("/employee", async (req, res) => {
   try {
-    const { name, email, mobile, password } = req.body;
+    const { name,roleName='Employee', email, mobile, password } = req.body;
 
     // Validation
     if (!name || !email || !mobile || !password) {
@@ -56,6 +56,7 @@ router.post("/employee", async (req, res) => {
     // Create employee
     const employee = await Admin.create({
       name,
+      roleName,
       email,
       mobile,
       password: hashedPassword,
@@ -69,6 +70,7 @@ router.post("/employee", async (req, res) => {
       data: {
         id: employee.id,
         name: employee.name,
+        roleName: employee.roleName,
         email: employee.email,
         mobile: employee.mobile,
         role: employee.role,
@@ -228,42 +230,85 @@ router.get('/users/analytics', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
   try {
-    const adminId = parseInt(req.params.id);
+    const adminId = parseInt(req.params.id, 10);
 
-    const { name, mobile,email } = req.body;
-    // Check if user exists and belongs to this business owner
-    const existingAdmin = await Admin.findOne({
-      where: {
-        id: adminId,
-      }
-    });
-    if (!existingAdmin) {
-      return res.status(404).json({
-        error: 'User not found',
-        message: 'User not found or access denied'
+    if (isNaN(adminId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid admin id',
+        message: 'Admin id must be a valid number',
       });
     }
 
-    // Update user
-    await Admin.update({ name, mobile,email },
-      {
-        where: { id: adminId }
-      }
-    );
+    const { name, roleName, mobile, email } = req.body;
 
-    // Fetch updated user
-    const updatedAdmin= await Admin.findByPk(adminId);
-
-    res.json({
-      message: 'Admin updated successfully',
-      user: updatedAdmin
+    // Check if admin exists
+    const existingAdmin = await Admin.findOne({
+      where: { id: adminId },
     });
 
+    if (!existingAdmin) {
+      return res.status(404).json({
+        success: false,
+        error: 'Admin not found',
+        message: 'Admin not found or access denied',
+      });
+    }
+
+    // Fall back to existing values when not provided in the request
+    const updatedData = {
+      name: name !== undefined ? name : existingAdmin.name,
+      roleName: roleName !== undefined ? roleName : existingAdmin.roleName,
+      mobile: mobile !== undefined ? mobile : existingAdmin.mobile,
+      email: email !== undefined ? email : existingAdmin.email,
+    };
+
+    // Uniqueness checks for mobile/email (exclude current admin)
+    if (updatedData.mobile !== existingAdmin.mobile) {
+      const mobileTaken = await Admin.findOne({
+        where: { mobile: updatedData.mobile, id: { [Op.ne]: adminId } },
+      });
+      if (mobileTaken) {
+        return res.status(409).json({
+          success: false,
+          error: 'Mobile already in use',
+          message: 'Another admin already uses this mobile number',
+        });
+      }
+    }
+
+    if (updatedData.email !== existingAdmin.email) {
+      const emailTaken = await Admin.findOne({
+        where: { email: updatedData.email, id: { [Op.ne]: adminId } },
+      });
+      if (emailTaken) {
+        return res.status(409).json({
+          success: false,
+          error: 'Email already in use',
+          message: 'Another admin already uses this email',
+        });
+      }
+    }
+
+    // Update admin with merged data
+    await Admin.update(updatedData, {
+      where: { id: adminId },
+    });
+
+    // Fetch updated admin
+    const updatedAdmin = await Admin.findByPk(adminId);
+
+    res.json({
+      success: true,
+      message: 'Admin updated successfully',
+      user: updatedAdmin,
+    });
   } catch (error) {
-    console.error('Update user error:', error);
+    console.error('Update admin error:', error);
     res.status(500).json({
-      error: 'Failed to update user',
-      message: 'Internal server error'
+      success: false,
+      error: 'Failed to update admin',
+      message: 'Internal server error',
     });
   }
 });

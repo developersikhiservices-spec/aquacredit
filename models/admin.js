@@ -15,6 +15,10 @@ const Admin = sequelize.define('Admin', {
       len: [2, 255]
     }
   },
+  roleName: {
+    type: DataTypes.STRING(255),
+    allowNull: true,
+  },
   email: {
     type: DataTypes.STRING(255),
     allowNull: false,
@@ -37,6 +41,17 @@ const Admin = sequelize.define('Admin', {
     type: DataTypes.ENUM('super_admin', 'admin','employee'),
     defaultValue: 'admin'
   },
+  permissions: {
+    type: DataTypes.JSON,
+    defaultValue: {
+      customer: true,
+      supplier: true,
+      transaction: true,
+      subscription: true,
+      employee: true,
+    }
+  },
+
   is_active: {
     type: DataTypes.BOOLEAN,
     defaultValue: true

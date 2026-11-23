@@ -15,26 +15,44 @@ router.get('/', async (req, res) => {
   try {
     const now = new Date();
 
-    const startOfLastMonth = startOfMonth(subMonths(now, 1));
-    const endOfLastMonth = endOfMonth(subMonths(now, 1));
+    // Default fromDate = start of current month, toDate = current date
+    const defaultFromDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    const defaultToDate = new Date(now);
 
-    const startOfThisMonth = startOfMonth(now);
-    const endOfThisMonth = endOfMonth(now);
+    const { fromDate, toDate } = req.query;
+
+    const startDate = fromDate ? new Date(fromDate) : defaultFromDate;
+    const endDate = toDate ? new Date(toDate) : defaultToDate;
+
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid fromDate or toDate format',
+      });
+    }
+
+    // Ensure startDate begins at 00:00:00.000
+    startDate.setHours(0, 0, 0, 0);
+
+    // Ensure endDate covers the full day
+    endDate.setHours(23, 59, 59, 999);
+
+    if (startDate > endDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'fromDate cannot be greater than toDate',
+      });
+    }
+
+    const dateRange = {
+      [Op.between]: [startDate, endDate],
+    };
 
     // Users
     const totalUsers = await User.findAndCountAll();
-    const lastMonthUsers = await User.count({
+    const rangeUsers = await User.count({
       where: {
-        created_at: {
-          [Op.between]: [startOfLastMonth, endOfLastMonth],
-        },
-      },
-    });
-    const thisMonthUsers = await User.count({
-      where: {
-        created_at: {
-          [Op.between]: [startOfThisMonth, endOfThisMonth],
-        },
+        created_at: dateRange,
       },
     });
 
@@ -43,20 +61,9 @@ router.get('/', async (req, res) => {
       distinct: true,
       col: 'mobile',
     });
-    const lastMonthCustomers = await Customer.count({
+    const rangeCustomers = await Customer.count({
       where: {
-        created_at: {
-          [Op.between]: [startOfLastMonth, endOfLastMonth],
-        },
-      },
-      distinct: true,
-      col: 'mobile',
-    });
-    const thisMonthCustomers = await Customer.count({
-      where: {
-        created_at: {
-          [Op.between]: [startOfThisMonth, endOfThisMonth],
-        },
+        created_at: dateRange,
       },
       distinct: true,
       col: 'mobile',
@@ -67,20 +74,9 @@ router.get('/', async (req, res) => {
       distinct: true,
       col: 'mobile',
     });
-    const lastMonthSuppliers = await Supplier.count({
+    const rangeSuppliers = await Supplier.count({
       where: {
-        created_at: {
-          [Op.between]: [startOfLastMonth, endOfLastMonth],
-        },
-      },
-      distinct: true,
-      col: 'mobile',
-    });
-    const thisMonthSuppliers = await Supplier.count({
-      where: {
-        created_at: {
-          [Op.between]: [startOfThisMonth, endOfThisMonth],
-        },
+        created_at: dateRange,
       },
       distinct: true,
       col: 'mobile',
@@ -89,19 +85,9 @@ router.get('/', async (req, res) => {
     // Transactions - sum of amounts
     const totalTransactionsAmount = await Transaction.sum('amount');
 
-    const lastMonthTransactionsAmount = await Transaction.sum('amount', {
+    const rangeTransactionsAmount = await Transaction.sum('amount', {
       where: {
-        created_at: {
-          [Op.between]: [startOfLastMonth, endOfLastMonth],
-        },
-      },
-    });
-
-    const thisMonthTransactionsAmount = await Transaction.sum('amount', {
-      where: {
-        created_at: {
-          [Op.between]: [startOfThisMonth, endOfThisMonth],
-        },
+        created_at: dateRange,
       },
     });
 
@@ -121,20 +107,18 @@ router.get('/', async (req, res) => {
     res.status(200).json({
       success: true,
       message: 'Dashboard stats fetched successfully',
+      fromDate: startDate,
+      toDate: endDate,
       Users: totalUsers,
-      lastMonthUsers,
-      thisMonthUsers,
+      rangeUsers,
       Customers: totalCustomers,
-      lastMonthCustomers,
-      thisMonthCustomers,
+      rangeCustomers,
       Suppliers: totalSuppliers,
-      lastMonthSuppliers,
-      thisMonthSuppliers,
+      rangeSuppliers,
       totalTransactionsAmount,
       giveTransactionsAmount,
       gotTransactionsAmount,
-      lastMonthTransactionsAmount,
-      thisMonthTransactionsAmount
+      rangeTransactionsAmount,
     });
   } catch (error) {
     console.error('Dashboard fetch error:', error);
@@ -145,7 +129,6 @@ router.get('/', async (req, res) => {
     });
   }
 });
-
 
 router.get('/user-stats', async (req, res) => {
   try {

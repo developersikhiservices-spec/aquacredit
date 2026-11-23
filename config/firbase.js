@@ -2,7 +2,7 @@ const admin = require('firebase-admin');
 
 // Initialize Firebase Admin SDK only once in your app
 if (!admin.apps.length) {
-  const serviceAccount = require('./aquacredit-421a9-firebase-adminsdk-fbsvc-633732cffa.json');
+  const serviceAccount = require('./aquacredit-b2ee3-firebase-adminsdk-fbsvc-f629caaf46.json');
 
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),

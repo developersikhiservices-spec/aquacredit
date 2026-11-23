@@ -8,40 +8,64 @@ const router = express.Router();
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
 
 // Send OTP
+
+const TEST_MOBILE = '9999999999';
+const TEST_OTP = '333333';
+
 router.post('/send', async (req, res) => {
   try {
     const { mobile } = req.body;
 
     if (!mobile) {
-      return res.status(400).json({ error: 'Mobile number is required' });
+      return res.status(400).json({
+        error: 'Mobile number is required'
+      });
     }
-    const user = await User.findOne({ where: { mobile } });
-    const otp = generateOTP();
-    const expiry = new Date(Date.now() + 5 * 60 * 1000); // 5 mins expiry
+
+    // Check Google Play Console test number
+    const isTestUser = String(mobile) === TEST_MOBILE;
+
+    // Fixed OTP for test user, random OTP for others
+    const otp = isTestUser ? TEST_OTP : generateOTP();
+
+    const expiry = new Date(Date.now() + 5 * 60 * 1000);
+
+    // Find existing user
+    let user = await User.findOne({
+      where: { mobile }
+    });
+
+    // Create user if not exists
     if (!user) {
-      const newUser = await User.create({
+      user = await User.create({
         mobile,
       });
-      await Otp.create({
-        user_id: newUser.id,
-        otp,
-        expires_at: expiry
-      });
-
-    } else {
-      await Otp.create({
-        user_id: user.id,
-        otp,
-        expires_at: expiry
-      });
     }
 
-    // TODO: Send OTP via SMS/Email here
+    // Save OTP
+    await Otp.create({
+      user_id: user.id,
+      otp,
+      expires_at: expiry
+    });
 
-    res.json({ success: true, message: 'OTP sent successfully', otp }); // ⚠️ remove otp in production
+    // Skip SMS for Google Play Console test account
+    if (!isTestUser) {
+      // TODO: Send OTP through SMS gateway
+      // await sendSMS(mobile, otp);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'OTP sent successfully'
+    });
+
   } catch (error) {
     console.error('Send OTP error:', error);
-    res.status(500).json({ error: 'Failed to send OTP' });
+
+    return res.status(500).json({
+      error: 'Failed to send OTP'
+    });
   }
 });
 

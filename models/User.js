@@ -110,6 +110,7 @@ const User = sequelize.define('User', {
     type: DataTypes.DECIMAL(15, 2),
     defaultValue: 0.00
   },
+
   // Add inside the define() fields object
 referral_code: {
   type: DataTypes.STRING(20),
