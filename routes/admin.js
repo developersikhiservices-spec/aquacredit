@@ -13,7 +13,7 @@ const router = express.Router();
 
 router.post("/employee", async (req, res) => {
   try {
-    const { name,roleName='Employee', email, mobile, password } = req.body;
+    const { name,roleName='Employee', email, mobile, password,permissions } = req.body;
 
     // Validation
     if (!name || !email || !mobile || !password) {
@@ -62,6 +62,7 @@ router.post("/employee", async (req, res) => {
       password: hashedPassword,
       role: "employee",
       is_active: true,
+      permissions
     });
 
     res.status(201).json({
@@ -74,6 +75,7 @@ router.post("/employee", async (req, res) => {
         email: employee.email,
         mobile: employee.mobile,
         role: employee.role,
+        permissions:employee.permissions,
         is_active: employee.is_active,
       },
     });
@@ -240,7 +242,7 @@ router.put('/:id', async (req, res) => {
       });
     }
 
-    const { name, roleName, mobile, email } = req.body;
+    const { name, roleName, mobile, email,permissions } = req.body;
 
     // Check if admin exists
     const existingAdmin = await Admin.findOne({
@@ -261,6 +263,7 @@ router.put('/:id', async (req, res) => {
       roleName: roleName !== undefined ? roleName : existingAdmin.roleName,
       mobile: mobile !== undefined ? mobile : existingAdmin.mobile,
       email: email !== undefined ? email : existingAdmin.email,
+      permissions: permissions !== undefined ? permissions : existingAdmin.permissions,
     };
 
     // Uniqueness checks for mobile/email (exclude current admin)
