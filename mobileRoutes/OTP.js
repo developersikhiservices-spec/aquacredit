@@ -29,7 +29,7 @@ router.post('/send', async (req, res) => {
     const otp = isTestUser ? TEST_OTP : generateOTP();
 
     const expiry = new Date(Date.now() + 5 * 60 * 1000);
-
+console.log("otp",otp);
     // Find existing user
     let user = await User.findOne({
       where: { mobile }
@@ -57,6 +57,7 @@ router.post('/send', async (req, res) => {
 
     return res.status(200).json({
       success: true,
+      otp,
       message: 'OTP sent successfully'
     });
 
