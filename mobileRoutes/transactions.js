@@ -1699,5 +1699,251 @@ router.get('/defaulters/supplier/:supplierId', async (req, res) => {
   }
 });
 
+router.get('/defaulters/customer/:customerId/byOwner', async (req, res) => {
+
+  try {
+
+    const { customerId } = req.params;
+
+    // 1️⃣ Get Selected Customer
+    const customer = await Customer.findByPk(customerId);
+
+    if (!customer) {
+      return res.status(404).json({
+        success: false,
+        message: "Customer not found"
+      });
+    }
+
+    const mobileNumber     = customer.mobile;
+    const businessOwnerId  = customer.business_owner_id;   // ← NEW
+
+    // 2️⃣ Get ALL Overdue Transactions Across System By Mobile
+    const overdueTransactions = await Transaction.findAll({
+
+      include: [{
+        model: Customer,
+        as: 'customer',
+        attributes: ['id', 'name', 'mobile'],
+        where: {  
+          mobile: mobileNumber,
+          business_owner_id: businessOwnerId,   // ← scope the join too
+         }
+      },
+      {
+        model: User,
+        as: 'businessOwner',  // <-- must match EXACT alias !!
+      }],
+
+      where: {
+        transaction_for: 'customer',
+        paymentType: 'credit',
+        remainingAmount: { [Op.gt]: 0 },
+        due_date: { [Op.lt]: new Date() },
+        is_Deleted: false,
+        business_owner_id:   businessOwnerId, 
+      },
+
+      order: [['due_date', 'ASC']]
+    });
+
+    // 3️⃣ Calculate Summary
+    let totalOverdue = 0;
+    let maxDelay = 0;
+
+    let stage1 = 0;
+    let stage2 = 0;
+    let stage3 = 0;
+    let stage4 = 0;
+
+    const today = new Date();
+
+    overdueTransactions.forEach(trx => {
+
+      totalOverdue += Number(trx.remainingAmount);
+
+      const delay = Math.floor(
+        (today - new Date(trx.due_date)) / (1000 * 60 * 60 * 24)
+      );
+
+      if (delay > maxDelay) maxDelay = delay;
+
+      if (delay <= 30) stage1++;
+      else if (delay <= 60) stage2++;
+      else if (delay <= 90) stage3++;
+      else stage4++;
+
+    });
+
+    // 4️⃣ Decide Final Stage
+    let finalStage = null;
+
+    if (stage4 > 0) finalStage = "Stage 4";
+    else if (stage3 > 0) finalStage = "Stage 3";
+    else if (stage2 > 0) finalStage = "Stage 2";
+    else if (stage1 > 0) finalStage = "Stage 1";
+
+    const status = overdueTransactions.length > 0 ? "Defaulter" : "Active";
+
+    // 5️⃣ Response
+    return res.status(200).json({
+      success: true,
+      data: {
+        customer_details: customer,
+
+        defaulter_summary: {
+          mobile: mobileNumber,
+          status,
+          total_overdue: totalOverdue,
+          overdue_count: overdueTransactions.length,
+          max_delay_days: maxDelay,
+          final_stage: finalStage,
+
+          stage_breakdown: {
+            stage1_count: stage1,
+            stage2_count: stage2,
+            stage3_count: stage3,
+            stage4_count: stage4
+          }
+        },
+
+        skipped_transactions: overdueTransactions
+      }
+    });
+
+  } catch (error) {
+
+    console.error("Error fetching customer defaulter details:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error"
+    });
+  }
+});
+
+router.get('/defaulters/supplier/:supplierId/byOwner', async (req, res) => {
+
+  try {
+
+    const { supplierId } = req.params;
+
+    // 1️⃣ Get Selected Customer
+    const supplier = await Supplier.findByPk(supplierId);
+
+    if (!supplier) {
+      return res.status(404).json({
+        success: false,
+        message: "Supplier not found"
+      });
+    }
+
+    const mobileNumber     = supplier.mobile;
+    const businessOwnerId  = supplier.business_owner_id;   // ← NEW
+
+    // 2️⃣ Get ALL Overdue Transactions Across System By Mobile
+    const overdueTransactions = await Transaction.findAll({
+
+      include: [{
+        model: Supplier,
+        as: 'supplier',
+        attributes: ['id', 'name', 'mobile'],
+        where: { 
+          mobile: mobileNumber,
+          business_owner_id: businessOwnerId,   // ← scope the join too
+        },
+      },
+      {
+        model: User,
+        as: 'businessOwner',  // <-- must match EXACT alias !!
+      }],
+
+      where: {
+        transaction_for: 'supplier',
+        paymentType: 'credit',
+        remainingAmount: { [Op.gt]: 0 },
+        due_date: { [Op.lt]: new Date() },
+        is_Deleted: false,
+        business_owner_id:   businessOwnerId, 
+      },
+
+      order: [['due_date', 'ASC']]
+    });
+
+    // 3️⃣ Calculate Summary
+    let totalOverdue = 0;
+    let maxDelay = 0;
+
+    let stage1 = 0;
+    let stage2 = 0;
+    let stage3 = 0;
+    let stage4 = 0;
+
+    const today = new Date();
+
+    overdueTransactions.forEach(trx => {
+
+      totalOverdue += Number(trx.remainingAmount);
+
+      const delay = Math.floor(
+        (today - new Date(trx.due_date)) / (1000 * 60 * 60 * 24)
+      );
+
+      if (delay > maxDelay) maxDelay = delay;
+
+      if (delay <= 30) stage1++;
+      else if (delay <= 60) stage2++;
+      else if (delay <= 90) stage3++;
+      else stage4++;
+
+    });
+
+    // 4️⃣ Decide Final Stage
+    let finalStage = null;
+
+    if (stage4 > 0) finalStage = "Stage 4";
+    else if (stage3 > 0) finalStage = "Stage 3";
+    else if (stage2 > 0) finalStage = "Stage 2";
+    else if (stage1 > 0) finalStage = "Stage 1";
+
+    const status = overdueTransactions.length > 0 ? "Defaulter" : "Active";
+
+    // 5️⃣ Response
+    return res.status(200).json({
+      success: true,
+      data: {
+        supplier_details: supplier,
+
+        defaulter_summary: {
+          mobile: mobileNumber,
+          status,
+          total_overdue: totalOverdue,
+          overdue_count: overdueTransactions.length,
+          max_delay_days: maxDelay,
+          final_stage: finalStage,
+
+          stage_breakdown: {
+            stage1_count: stage1,
+            stage2_count: stage2,
+            stage3_count: stage3,
+            stage4_count: stage4
+          }
+        },
+
+        skipped_transactions: overdueTransactions
+      }
+    });
+
+  } catch (error) {
+
+    console.error("Error fetching customer defaulter details:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error"
+    });
+  }
+});
+
 
 module.exports = router;

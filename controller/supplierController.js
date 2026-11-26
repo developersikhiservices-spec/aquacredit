@@ -27,7 +27,7 @@ async function createSupplier(data,userData) {
     }
   
     await Customer.findOrCreate({
-      where: { mobile: data.mobile },
+      where: { mobile: userData.mobile,business_owner_id: user.id },
       defaults: {
         business_owner_id: user.id,
         ownerId: user.owner_user_id,
